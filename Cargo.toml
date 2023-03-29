@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "projects/07/vmtranslator",
+    "projects/06/assembler"
+]
