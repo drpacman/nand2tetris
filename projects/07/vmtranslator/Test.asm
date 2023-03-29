@@ -1,0 +1,1 @@
+// push constant 6@6D=A@SPA=MM=D@SPM=M+1// pop temp 2@5D=A@2D=D+A@R13M=D@SPM=M-1A=MD=M@R13A=MM=D// push constant 3@3D=A@SPA=MM=D@SPM=M+1// push temp 2@5D=A@2A=D+AD=M@SPA=MM=D@SPM=M+1// sub@SPA=MA=A-1D=MA=A-1M=D-M@SPM=M-1

@@ -1,0 +1,7 @@
+push constant 6
+//push constant 6
+//add
+pop temp 2
+push constant 3
+push temp 2
+sub
