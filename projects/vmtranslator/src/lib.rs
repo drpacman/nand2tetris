@@ -43,8 +43,8 @@ pub struct VMInstructionParser {
 
 impl VMInstructionParser {
 
-    pub fn new(filestem : &str) -> VMInstructionParser {
-        VMInstructionParser { filename: format!("{}.vm", filestem) }
+    pub fn new(filename : &str) -> VMInstructionParser {
+        VMInstructionParser { filename: filename.to_string() }
     }
 
     pub fn parse(&self) -> Result<Vec<VMInstruction>,std::io::Error> {
@@ -137,6 +137,18 @@ impl Compiler {
         }
     }
 
+    pub fn generate_bootstrap(&mut self) -> Vec<assembler::Instruction> {
+        let mut init = Vec::new();
+        // SP = 256
+        init.push(Instruction::AInstruction { symbol: None, value: Some(256) });
+        init.push(Instruction::CInstruction { dest: Some("D".to_string()), comp: ("A".to_string()), jump: None });
+        init.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
+        init.push(Instruction::CInstruction { dest: Some("M".to_string()), comp: ("D".to_string()), jump: None });
+        // call Sys.init
+        self.call("Sys.init", 0, &mut init);
+        init
+    }
+
     pub fn compile(&mut self, vm_instructions: Vec<VMInstruction>) -> Vec<assembler::Instruction> {
         self.bool_symbol_counter = 0;
         vm_instructions.iter().map(|ins| self.compile_instruction(ins)).flatten().collect()
@@ -213,54 +225,17 @@ impl Compiler {
                 output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });            
             },
             VMInstruction::CArithmetic { cmd } => {
-                // grab top value off the stack
-                output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
-                output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
-                    
-                if cmd == "not" {
-                    output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"!M".to_string(), jump: None });                    
-                } else if cmd == "neg" {
-                    output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"-M".to_string(), jump: None });                      
-                } else {                         
-                    // get prior value from stack
-                    output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });
-                    output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
-                    match cmd.as_str() {
-                        "add" => output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D+M".to_string(), jump: None }),
-                        "sub" => output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-D".to_string(), jump: None }),
-                        "and" => output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D&M".to_string(), jump: None }),
-                        "or" => output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D|M".to_string(), jump: None }),
-                        _ => {
-                            let jump = match cmd.as_str() {
-                                "lt" => Some("JLT".to_string()),
-                                "gt" => Some("JGT".to_string()),
-                                "eq" => Some("JEQ".to_string()),
-                                _ => panic!("Unexpected cmd {}", cmd)
-                            };
-                            output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M-D".to_string(), jump: None });
-                            output.push(Instruction::AInstruction { symbol: Some(format!("BOOL_{}", self.bool_symbol_counter)), value: None });
-                            output.push(Instruction::CInstruction { dest: None, comp:"D".to_string(), jump });
-                            output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });                
-                            output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
-                            output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
-                            output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
-                            output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"0".to_string(), jump: None });
-                            output.push(Instruction::AInstruction { symbol: Some(format!("END_BOOL_{}", self.bool_symbol_counter)), value: None });
-                            output.push(Instruction::CInstruction { dest: None, comp:"0".to_string(), jump: Some("JMP".to_string()) });
-                            output.push(Instruction::LInstruction { symbol: format!("BOOL_{}", self.bool_symbol_counter) });
-                            output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });                
-                            output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
-                            output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
-                            output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
-                            output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"-1".to_string(), jump: None });
-                            output.push(Instruction::LInstruction { symbol: format!("END_BOOL_{}", self.bool_symbol_counter) });
-                            self.bool_symbol_counter += 1;                        
-                        }                
-                    }
-                    // decrement SP
-                    output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
-                    output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });                       
+                match cmd.as_str() {
+                    "sub" => { Compiler::sub(&mut output); },
+                    "add"=> { Compiler::add(&mut output); },
+                    "and"=> { Compiler::and(&mut output); },
+                    "or"=> { Compiler::or(&mut output); },
+                    "not"=> { Compiler::not(&mut output); },
+                    "neg"=> { Compiler::neg(&mut output); },
+                    "lt" => { self.lt(&mut output) },
+                    "gt" => { self.gt(&mut output) },
+                    "eq" => { self.eq(&mut output) },
+                    _ => panic!("Unexpected arithmetic cmd {}", cmd)
                 }
             },
             VMInstruction::CLabel { label } => {
@@ -276,44 +251,20 @@ impl Compiler {
                 output.push(Instruction::CInstruction { dest: None, comp:"D".to_string(), jump: Some("JNE".to_string()) });
             },
             VMInstruction::CCall { symbol, n_args } => {
-                Compiler::push_symbol(format!("ret_{}", self.ret_symbol_count).as_str(), &mut output);
-                Compiler::push_symbol("LCL", &mut output);
-                Compiler::push_symbol("ARG", &mut output);
-                Compiler::push_symbol("THIS", &mut output);
-                Compiler::push_symbol("THAT", &mut output);
-                // // update ARG to SP-5-nargs
-                Compiler::push_symbol("SP", &mut output);
-                Compiler::push_value(5, &mut output);
-                Compiler::push_value(*n_args, &mut output);
-                Compiler::sub(&mut output);
-                Compiler::sub(&mut output);
-                Compiler::pop_symbol("ARG", &mut output);
-                // // set LCL to current SP
-                output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });   
-                output.push(Instruction::AInstruction { symbol: Some("LCL".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });   
-                // goto function
-                output.push(Instruction::AInstruction { symbol: Some(symbol.to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: None, comp:"0".to_string(), jump: Some("JMP".to_string()) });   
-                output.push(Instruction::LInstruction { symbol: format!("ret_{}", self.ret_symbol_count) });
-                self.ret_symbol_count += 1;                
+                self.call(symbol, *n_args, &mut output);                             
             },
             VMInstruction::CFunction { symbol, n_vars } => {
+                output.push(Instruction::LInstruction { symbol: symbol.to_string() });
                 for i in 0..*n_vars {
                     Compiler::push_value(0, &mut output);
                 }
             },
             VMInstruction::CReturn => {
-                // Save current LCL location in R13
-                // @R13 = LCL
-                output.push(Instruction::AInstruction { symbol: Some("LCL".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None }); 
-                output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None }); 
-                
-                // pop stack value onto current value of ARG
-                Compiler::pop_symbol("ARG", &mut output);
+                // pop stack value onto current location of ARG
+                Compiler::pop_d(&mut output);
+                output.push(Instruction::AInstruction { symbol: Some("ARG".to_string()), value: None });
+                output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None }); 
+                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });                 
                 
                 // set SP = *ARG + 1
                 output.push(Instruction::AInstruction { symbol: Some("ARG".to_string()), value: None });
@@ -322,59 +273,53 @@ impl Compiler {
                 output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
                 output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });                 
                 
+                // Save current LCL location in R13
+                // @R13 = LCL
+                Compiler::assign("R13", "LCL", &mut output);                
+                
                 // Restore THAT
-                // THAT = @R13 - 1
+                // THAT = *(@R13 - 1)
                 output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });                 
-                output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });                 
-                output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });                 
-                output.push(Instruction::AInstruction { symbol: Some("THAT".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None }); 
+                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });
+                Compiler::assign_deref("THAT", "R13", &mut output);                
                   
                 // Restore THIS
-                // THIS = @R13 - 2
+                // THIS = *(@R13 - 2)
                 output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
                 output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });                 
-                output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });                 
-                output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });                 
-                output.push(Instruction::AInstruction { symbol: Some("THIS".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None }); 
+                Compiler::assign_deref("THIS", "R13", &mut output);                
                 
                 // Restore ARG
-                // ARG = @R13 - 3
+                // ARG = *(@R13 - 3)
                 output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
                 output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });                 
-                output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });                 
-                output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });                 
-                output.push(Instruction::AInstruction { symbol: Some("ARG".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None }); 
+                Compiler::assign_deref("ARG", "R13", &mut output);                
                 
                 // Restore LCL
-                // LCL = @R13 - 4
+                // LCL = *(@R13 - 4)
+                output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
+                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });                 
+                Compiler::assign_deref("LCL", "R13", &mut output);                
+                
+                // goto retAddr = *(@R13 - 5)
                 output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
                 output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });                 
                 output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });                 
-                output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });                 
-                output.push(Instruction::AInstruction { symbol: Some("LCL".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None }); 
-                
-                // goto retAddr = @R13 - 5
-                output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });                 
-                output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None }); 
-                output.push(Instruction::CInstruction { dest: None, comp:"0".to_string(), jump: Some("JMP".to_string()) });                 
+                output.push(Instruction::CInstruction { dest: None, comp:"0".to_string(), jump: Some("JMP".to_string()) });                
             }
         }
         output
     }
 
     fn push_symbol(symbol : &str, output : &mut Vec<Instruction>) {
+        output.push(Instruction::Comment { contents: format!("Push {}", symbol) });
         output.push(Instruction::AInstruction { symbol: Some(symbol.to_string()), value: None });
-        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None }); 
+        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None }); 
         Compiler::push_d(output);
     }
 
     fn push_value(value : u16, output : &mut Vec<Instruction>) {
+        output.push(Instruction::Comment { contents: format!("Push {}", value) });
         output.push(Instruction::AInstruction { symbol: None, value: Some(value) });
         output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None }); 
         Compiler::push_d(output);
@@ -391,18 +336,56 @@ impl Compiler {
     }
 
     fn sub(output : &mut Vec<Instruction>) {
+        output.push(Instruction::Comment { contents: "sub".to_string() });
+        Compiler::arithmetic_cmd("M-D", output);
+    }
+
+    fn add(output : &mut Vec<Instruction>) {
+        output.push(Instruction::Comment { contents: "add".to_string() });
+        Compiler::arithmetic_cmd("D+M", output);
+    }
+
+    fn or(output : &mut Vec<Instruction>) {
+        output.push(Instruction::Comment { contents: "or".to_string() });
+        Compiler::arithmetic_cmd("D|M", output);
+    }
+    
+    fn and(output : &mut Vec<Instruction>) {
+        output.push(Instruction::Comment { contents: "and".to_string() });
+        Compiler::arithmetic_cmd("D&M", output);
+    }
+    
+    fn arithmetic_cmd(cmd : &str, output : &mut Vec<Instruction>){
         output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
         output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
         output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
         output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });
         output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
-        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-D".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:cmd.to_string(), jump: None });
+        output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
+        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });        
+    }
+
+    fn neg(output : &mut Vec<Instruction>){
+        Compiler::unary_cmd("-M", output);
+    }
+
+    fn not(output : &mut Vec<Instruction>){
+        Compiler::unary_cmd("!M", output);
+    }
+    
+    fn unary_cmd(cmd: &str, output : &mut Vec<Instruction>){
+        // grab top value off the stack
+        output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:cmd.to_string(), jump: None });                            
     }
 
     fn pop_symbol(symbol : &str, output : &mut Vec<Instruction>) {
+        output.push(Instruction::Comment { contents: format!("pop {}", symbol).to_string() });
         Compiler::pop_d(output);
         output.push(Instruction::AInstruction { symbol: Some(symbol.to_string()), value: None });
-        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
         output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });      
     }
 
@@ -413,6 +396,103 @@ impl Compiler {
         output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
         output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });
     }
+
+    fn goto_label(symbol: &str, output: &mut Vec<Instruction>) {
+        output.push(Instruction::Comment { contents: format!("goto {}", symbol).to_string() });
+        output.push(Instruction::AInstruction { symbol: Some(symbol.to_string()), value: None });
+        output.push(Instruction::CInstruction { dest: None, comp:"0".to_string(), jump: Some("JMP".to_string()) });
+    }
+
+    fn assign(symbol: &str, other : &str, output: &mut Vec<Instruction>) {
+        output.push(Instruction::Comment { contents: format!("set {}={}", symbol, other) });
+        output.push(Instruction::AInstruction { symbol: Some(other.to_string()), value: None });
+        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });   
+        output.push(Instruction::AInstruction { symbol: Some(symbol.to_string()), value: None });
+        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });           
+    }
+
+    fn assign_deref(symbol: &str, other : &str, output: &mut Vec<Instruction>) {
+        output.push(Instruction::Comment { contents: format!("set {}=*{}", symbol, other) });
+        output.push(Instruction::AInstruction { symbol: Some(other.to_string()), value: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });   
+        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });   
+        output.push(Instruction::AInstruction { symbol: Some(symbol.to_string()), value: None });
+        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });           
+    }
+
+    pub fn call(&mut self, symbol: &str, n_args : u16, output : &mut Vec<Instruction>) {
+        output.push(Instruction::Comment { contents: format!("call {} {}", symbol, n_args).to_string() });
+        
+        let return_label = format!("ret_{}", self.ret_symbol_count);
+        output.push(Instruction::Comment { contents: format!("push {}", return_label).to_string() });
+        output.push(Instruction::AInstruction { symbol: Some(return_label.clone()), value: None });
+        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None }); 
+        Compiler::push_d(output);
+        
+        Compiler::push_symbol("LCL", output);
+        Compiler::push_symbol("ARG", output);
+        Compiler::push_symbol("THIS", output);
+        Compiler::push_symbol("THAT", output);
+        // // update ARG to SP-5-nargs
+        Compiler::push_symbol("SP", output);
+        Compiler::push_value(5, output);
+        Compiler::sub(output);
+        Compiler::push_value(n_args, output);
+        Compiler::sub(output);
+        Compiler::pop_symbol("ARG", output);
+        // // set LCL to current SP
+        Compiler::assign("LCL", "SP", output);
+        // goto function
+        Compiler::goto_label(symbol, output);
+        // return label
+        output.push(Instruction::LInstruction { symbol: return_label.clone() });
+        self.ret_symbol_count += 1;  
+    }
+
+    fn lt(&mut self, output : &mut Vec<Instruction>){
+        self.boolean_cmd("JLT", output);
+    } 
+    
+    fn gt(&mut self, output : &mut Vec<Instruction>){
+        self.boolean_cmd("JGT", output);
+    } 
+    
+    fn eq(&mut self, output : &mut Vec<Instruction>){
+        self.boolean_cmd("JEQ", output);
+    } 
+    
+    fn boolean_cmd(&mut self, jmp_cmd: &str, output: &mut Vec<Instruction>){
+        // grab top value off the stack
+        output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
+            
+        // get prior value from stack
+        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M-D".to_string(), jump: None });
+        output.push(Instruction::AInstruction { symbol: Some(format!("BOOL_{}", self.bool_symbol_counter)), value: None });
+        output.push(Instruction::CInstruction { dest: None, comp:"D".to_string(), jump: Some(jmp_cmd.to_string()) });
+        output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });                
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"0".to_string(), jump: None });
+        output.push(Instruction::AInstruction { symbol: Some(format!("END_BOOL_{}", self.bool_symbol_counter)), value: None });
+        output.push(Instruction::CInstruction { dest: None, comp:"0".to_string(), jump: Some("JMP".to_string()) });
+        output.push(Instruction::LInstruction { symbol: format!("BOOL_{}", self.bool_symbol_counter) });
+        output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });                
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"-1".to_string(), jump: None });
+        output.push(Instruction::LInstruction { symbol: format!("END_BOOL_{}", self.bool_symbol_counter) });
+        self.bool_symbol_counter += 1;                        
+        // decrement SP
+        output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
+        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });
+    }
+
 }
 
 pub struct ASMWriter {
