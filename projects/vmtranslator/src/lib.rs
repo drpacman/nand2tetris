@@ -260,6 +260,17 @@ impl Compiler {
                 }
             },
             VMInstruction::CReturn => {
+                
+                // @R13 = LCL - 5
+                Compiler::assign("R13", "LCL", &mut output);    
+                output.push(Instruction::AInstruction { symbol: None, value: Some(5) });
+                output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None });                 
+                output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
+                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-D".to_string(), jump: None });                 
+                // save ret address in R14 
+                // retAddr = *(LCL - 5)
+                Compiler::assign_deref("R14", "R13", &mut output);    
+                                                                
                 // pop stack value onto current location of ARG
                 Compiler::pop_d(&mut output);
                 output.push(Instruction::AInstruction { symbol: Some("ARG".to_string()), value: None });
@@ -273,37 +284,32 @@ impl Compiler {
                 output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
                 output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });                 
                 
-                // Save current LCL location in R13
-                // @R13 = LCL
-                Compiler::assign("R13", "LCL", &mut output);                
-                
-                // Restore THAT
-                // THAT = *(@R13 - 1)
+                // Restore LCL
+                // LCL = *(@R13 - 4)
                 output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });
-                Compiler::assign_deref("THAT", "R13", &mut output);                
-                  
-                // Restore THIS
-                // THIS = *(@R13 - 2)
-                output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });                 
-                Compiler::assign_deref("THIS", "R13", &mut output);                
+                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M+1".to_string(), jump: None });                 
+                Compiler::assign_deref("LCL", "R13", &mut output);                
                 
                 // Restore ARG
                 // ARG = *(@R13 - 3)
                 output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });                 
+                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M+1".to_string(), jump: None });                 
                 Compiler::assign_deref("ARG", "R13", &mut output);                
                 
-                // Restore LCL
-                // LCL = *(@R13 - 4)
+                // Restore THIS
+                // THIS = *(@R13 - 2)
                 output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });                 
-                Compiler::assign_deref("LCL", "R13", &mut output);                
+                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M+1".to_string(), jump: None });                 
+                Compiler::assign_deref("THIS", "R13", &mut output);                
                 
-                // goto retAddr = *(@R13 - 5)
+                // Restore THAT
+                // THAT = *(@R13 - 1)
                 output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });                 
+                output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M+1".to_string(), jump: None });
+                Compiler::assign_deref("THAT", "R13", &mut output);                
+                  
+                // goto retAddr = *(@R13 - 5)
+                output.push(Instruction::AInstruction { symbol: Some("R14".to_string()), value: None });
                 output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });                 
                 output.push(Instruction::CInstruction { dest: None, comp:"0".to_string(), jump: Some("JMP".to_string()) });                
             }
