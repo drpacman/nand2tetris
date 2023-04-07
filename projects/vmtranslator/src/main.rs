@@ -22,7 +22,6 @@ fn generate_asm(compiler: &mut Compiler, filename : &str) -> Vec<Instruction> {
 }
 
 fn main() {
-    // let filestem = "/Users/caporp01/workspace/nand2tetris/nand2tetris/projects/07/StackArithmetic/StackTest/StackTest";    
     let args: Vec<String> = env::args().collect();
     let path = Path::new(args[1].as_str());
     let mut compiler = Compiler::new();

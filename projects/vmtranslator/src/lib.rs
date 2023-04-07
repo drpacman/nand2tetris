@@ -125,15 +125,17 @@ impl VMInstructionParser {
 }
 
 pub struct Compiler {
-    bool_symbol_counter : i16,
-    ret_symbol_count : i16
+    bool_symbol_counter : u16,
+    ret_symbol_count : u16,
+    static_base : u16
 }
 
 impl Compiler {
     pub fn new() -> Compiler {
         Compiler{ 
             bool_symbol_counter: 0,
-            ret_symbol_count: 0
+            ret_symbol_count: 0,
+            static_base: 16
         }
     }
 
@@ -151,9 +153,32 @@ impl Compiler {
 
     pub fn compile(&mut self, vm_instructions: Vec<VMInstruction>) -> Vec<assembler::Instruction> {
         self.bool_symbol_counter = 0;
-        vm_instructions.iter().map(|ins| self.compile_instruction(ins)).flatten().collect()
-    
+        let instructions = vm_instructions.iter().map(|ins| self.compile_instruction(ins)).flatten().collect();
+        // update static base
+        let static_count = vm_instructions.iter().filter_map(|ins| {
+            match ins  {
+                VMInstruction::CPush{ segment, value } if segment == "static" => Some(*value + 1),
+                VMInstruction::CPop{ segment, value } if segment == "static" => Some(*value + 1),              
+                _ => Some(0)
+            }
+        }).max().unwrap();
+        self.static_base += static_count;
+        instructions
     }
+
+    fn lookup_segment_target(&mut self, segment: &String) -> String {
+        match segment.as_str() {
+            "local" => "LCL".to_string(),
+            "argument" => "ARG".to_string(),
+            "this" => "THIS".to_string(),
+            "that" => "THAT".to_string(),
+            "temp" => "5".to_string(),
+            "static" => { self.static_base.to_string() },
+            "pointer" => "3".to_string(),
+            _ => panic!("Unsupported segment {}", segment)
+        }
+    }
+
     fn compile_instruction(&mut self, ins : &VMInstruction) -> Vec<Instruction> {
         let mut output = Vec::new();
         output.push(Instruction::Comment { contents: format!("{}", ins) });
@@ -164,18 +189,9 @@ impl Compiler {
                         Compiler::push_value(*value, &mut output);
                     },
                     _ => {
-                        let target = match segment.as_str() {
-                            "local" => "LCL",
-                            "argument" => "ARG",
-                            "this" => "THIS",
-                            "that" => "THAT",
-                            "temp" => "5",
-                            "static" => "16",
-                            "pointer" => "3",
-                            _ => panic!("Unsupported PUSH segment {}", segment)
-                        };
-                        output.push(Instruction::AInstruction { symbol: Some(target.to_string()), value: None });                    
-                        match target {
+                        let target = self.lookup_segment_target(segment);
+                        output.push(Instruction::AInstruction { symbol: Some(target.clone()), value: None });                    
+                        match target.as_str() {
                             "LCL" | "ARG" | "THIS" | "THAT" => {
                                 output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
                             },
@@ -192,18 +208,10 @@ impl Compiler {
                 }
             }, 
             VMInstruction::CPop{ segment, value } => {
-                let target= match segment.as_str() {
-                    "local" => "LCL",
-                    "argument" => "ARG",
-                    "this" => "THIS",
-                    "that" => "THAT",
-                    "temp" => "5",
-                    "static" => "16",
-                    "pointer" => "3",
-                    _ => panic!("Unsupported POP segment {}", segment)
-                };
+                let target = self.lookup_segment_target(segment);
+                        
                 output.push(Instruction::AInstruction { symbol: Some(target.to_string()), value: None });                    
-                match target {
+                match target.as_str() {
                     "LCL" | "ARG" | "THIS" | "THAT" => {
                         output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
                     },
