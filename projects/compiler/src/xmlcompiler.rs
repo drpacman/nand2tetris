@@ -1,162 +1,18 @@
+
+use crate::compiler;
+
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::iter::{ Iterator, Peekable };
 
-pub struct JackTokenizer {
-    filename : String,
-    block_comment : bool
-}
-#[derive(Debug)]
-pub enum Token {
-    KeyWord(KeyWord),
-    Symbol(char),
-    Identifier(String),
-    Int(i16),
-    String(String)
-}
-
-#[derive(Debug, PartialEq)]
-pub enum KeyWord {
-    Class, Constructor, Function, Method, Field,
-    Static, Var, Int, Char, Boolean, Void,
-    True, False, Null, This,
-    Let, Do, If, Else, While, Return
-}
-
-impl JackTokenizer {
-
-    pub fn new(filename : &str ) -> JackTokenizer {
-        JackTokenizer { filename: filename.to_string(), block_comment: false }
-    }
-
-    pub fn parse(&mut self) -> Result<Vec<Token>,std::io::Error> {
-        let mut f = File::open(&self.filename).expect("Missing file");
-        let mut contents = String::new();
-        f.read_to_string(&mut contents)?;
-        let tokens = contents.to_string()
-                            .split('\n')
-                            .map(|s| self.parse_line(s))
-                            .flatten().collect();
-        Ok(tokens)
-    }
-
-    fn tokenize_string(text : String) -> Token {                            
-        let numbers = vec!['0','1','2','3','4','5','6','7','8','9'];
-        if numbers.contains(&text.chars().next().unwrap()) {
-            Token::Int( text.parse::<i16>().unwrap() )
-        } else {
-            match text.as_str() {
-                "class" => Token::KeyWord(KeyWord::Class),
-                "constructor" => Token::KeyWord(KeyWord::Constructor),
-                "function" => Token::KeyWord(KeyWord::Function),
-                "method" => Token::KeyWord(KeyWord::Method),
-                "field" => Token::KeyWord(KeyWord::Field),
-                "static" => Token::KeyWord(KeyWord::Static),
-                "var" => Token::KeyWord(KeyWord::Var),
-                "int" => Token::KeyWord(KeyWord::Int),
-                "char" => Token::KeyWord(KeyWord::Char),
-                "boolean" => Token::KeyWord(KeyWord::Boolean),
-                "void" => Token::KeyWord(KeyWord::Void),
-                "true" => Token::KeyWord(KeyWord::True),
-                "false" => Token::KeyWord(KeyWord::False),
-                "null" => Token::KeyWord(KeyWord::Null),
-                "this" => Token::KeyWord(KeyWord::This),
-                "let" => Token::KeyWord(KeyWord::Let),
-                "do" => Token::KeyWord(KeyWord::Do),
-                "if" => Token::KeyWord(KeyWord::If),
-                "else" => Token::KeyWord(KeyWord::Else),
-                "while" => Token::KeyWord(KeyWord::While),
-                "return" => Token::KeyWord(KeyWord::Return),
-                _ => {
-                    Token::Identifier( text )
-                }
-            }
-        }
-    }
-    
-    fn parse_line(&mut self, line : &str) -> Vec<Token> {
-        let mut tokens : Vec<Token> = Vec::new();
-        let mut text = Vec::new();
-        let mut is_str = false;
-        let mut c_last : char = '0';
-        for c in line.chars() {
-            if self.block_comment {
-                if c == '/' && c_last == '*' {
-                    self.block_comment = false;
-                } 
-            } else {
-                match c {
-                    ' ' | '\t'  if !is_str => { 
-                        if text.len() > 0 {
-                            tokens.push(JackTokenizer::tokenize_string(text.clone().into_iter().collect()));
-                        }
-                        text.clear();                 
-                    },
-                    '{' | '}' | '(' | ')' | '[' | ']' | '.' | ',' | ';' | '+' | '-' | '*' | '/' | '&' | '|' | '<' | '>' | '=' | '~' => {
-                        if text.len() > 0 {
-                            tokens.push(JackTokenizer::tokenize_string(text.clone().into_iter().collect()));
-                        }
-                        text.clear();
-                        if c == '/' {
-                            if c_last == '/' {
-                                // rest of line is commented out - return what we have, removing the first /
-                                tokens.pop();
-                                return tokens
-                            } else {
-                                tokens.push(Token::Symbol(c));                        
-                            } 
-                        } else if c == '*' && c_last == '/' {
-                            tokens.pop();
-                            self.block_comment = true;
-                        } else {
-                            tokens.push(Token::Symbol(c));                        
-                        }                                 
-                    },
-                    '"' => {
-                        if is_str {
-                            tokens.push(Token::String( text.clone().into_iter().collect() ));
-                            text.clear();
-                            is_str = false;
-                        } else {
-                            text.clear();
-                            is_str = true;
-                        }
-                    }
-                    _ => {
-                        text.push(c);
-                    }
-                }
-            }
-            c_last = c;
-        }
-        tokens
-    }
-}
-
-trait CompilationEngine {
-    fn compile_class(&mut self);
-    fn compile_class_var_dec(&mut self);
-    fn compile_subroutine(&mut self);
-    fn compile_param_list(&mut self);
-    fn compile_subroutine_body(&mut self);
-    fn compile_var_dec(&mut self);
-    fn compile_statements(&mut self);
-    fn compile_if(&mut self);
-    fn compile_let(&mut self);
-    fn compile_while(&mut self);
-    fn compile_do(&mut self);
-    fn compile_return(&mut self);
-    fn compile_expression(&mut self);
-    fn compile_term(&mut self);
-    fn compile_expression_list(&mut self) -> u8;
-}
+use compiler::{Token, KeyWord};
 
 pub struct XMLCompilationEngine<T> where T:Iterator {
     tokens : Peekable<T>
 }
 
-impl<T : Iterator<Item=Token>> XMLCompilationEngine<T> {
+impl<T: Iterator<Item=Token>> XMLCompilationEngine<T> {
     const binary_op :&'static [char] = &['+','-','*','/','&','|','<','>','='];
     const unary_op :&'static [char] = &['-','~'];
 
@@ -191,7 +47,31 @@ impl<T : Iterator<Item=Token>> XMLCompilationEngine<T> {
         }
     }
     
-    pub fn compile_class(&mut self){
+    fn compile_type_dec(&mut self) {
+        self.compile_type();
+        self.process_identifier();
+        while let Some(Token::Symbol(',')) = self.tokens.peek() {
+            self.process_symbol(',');
+            self.process_identifier();        
+        }
+        self.process_symbol(';'); 
+    }
+
+    fn compile_type(&mut self) {
+        let type_token = self.tokens.next();
+        match type_token {
+            Some(Token::KeyWord(k)) 
+                if k == KeyWord::Int || k == KeyWord::Char || k==KeyWord::Boolean  
+                    => { println!("<keyword> {:?} </keyword>", k) },
+            Some(Token::Identifier(id)) => println!("<identifier> {} </identifier>", id),
+            _ => panic!("missing type token")
+        }      
+    }
+}
+
+impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngine<T> {
+    
+    fn compile_class(&mut self){
         println!("<class>");
         self.process_keyword(KeyWord::Class);
         self.process_identifier();
@@ -235,28 +115,6 @@ impl<T : Iterator<Item=Token>> XMLCompilationEngine<T> {
             println!("</varDec>");        
         }
     }
-    
-    fn compile_type_dec(&mut self) {
-        self.compile_type();
-        self.process_identifier();
-        while let Some(Token::Symbol(',')) = self.tokens.peek() {
-            self.process_symbol(',');
-            self.process_identifier();        
-        }
-        self.process_symbol(';'); 
-    }
-
-    fn compile_type(&mut self) {
-        let type_token = self.tokens.next();
-        match type_token {
-            Some(Token::KeyWord(k)) 
-                if k == KeyWord::Int || k == KeyWord::Char || k==KeyWord::Boolean  
-                    => { println!("<keyword> {:?} </keyword>", k) },
-            Some(Token::Identifier(id)) => println!("<identifier> {} </identifier>", id),
-            _ => panic!("missing type token")
-        }      
-    }
-
         
     fn compile_subroutine(&mut self){
         println!("<subroutineDec>");
@@ -276,10 +134,10 @@ impl<T : Iterator<Item=Token>> XMLCompilationEngine<T> {
         } else {
             panic!("Missing keyword for subroutine dec");
         }       
-    }
-    
+    }    
+
     fn compile_parameter_list(&mut self){
-        println!("<parameterList>");
+       println!("<parameterList>");
         loop {
             match self.tokens.peek() {
                 Some(Token::Symbol(')')) => break,
@@ -346,11 +204,17 @@ impl<T : Iterator<Item=Token>> XMLCompilationEngine<T> {
     fn compile_if(&mut self){
         self.process_keyword(KeyWord::If);
         self.process_symbol('(');
-        // compile_expression(self);
+        self.compile_expression();
         self.process_symbol(')');
         self.process_symbol('{');
         self.compile_statements();
         self.process_symbol('}');
+        if let Some(Token::KeyWord(KeyWord::Else)) = self.tokens.peek() {
+            self.process_keyword(KeyWord::Else);
+            self.process_symbol('{');
+            self.compile_statements();
+            self.process_symbol('}');
+        }                
     }
 
     fn compile_let(&mut self){
@@ -396,19 +260,21 @@ impl<T : Iterator<Item=Token>> XMLCompilationEngine<T> {
         println!("</returnStatement>");        
     }   
 
-    fn compile_expression_list(&mut self) {
+    fn compile_expression_list(&mut self) -> u8 {
         println!("<expressionList>");
+        let mut expression_count = 0;
         loop {
             if let Some(Token::Symbol(')')) = self.tokens.peek() {
                 break
             }
             self.compile_expression();
+            expression_count+=1;
             if let Some(Token::Symbol(',')) = self.tokens.peek() {
                 self.process_symbol(',');
             }
         }
-        println!("</expressionList>");
-        
+        println!("</expressionList>");  
+        expression_count      
     }
     
     fn compile_expression(&mut self) {
@@ -439,7 +305,6 @@ impl<T : Iterator<Item=Token>> XMLCompilationEngine<T> {
             Token::String(s) => { println!("<stringConstant> {:?} </stringConstant>", s);},
             Token::KeyWord(k) => { println!("<keyword> {:?} </keyword>", k); },
             Token::Symbol('(') => { 
-                self.process_symbol('(');
                 self.compile_expression();
                 self.process_symbol(')');  
             },
