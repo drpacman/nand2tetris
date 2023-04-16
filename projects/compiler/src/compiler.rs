@@ -6,7 +6,7 @@ pub struct JackTokenizer {
     filename : String,
     block_comment : bool
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Token {
     KeyWord(KeyWord),
     Symbol(char),
@@ -86,6 +86,19 @@ impl JackTokenizer {
                 } 
             } else {
                 match c {
+                    '"' => {
+                        if is_str {
+                            tokens.push(Token::String( text.clone().into_iter().collect() ));
+                            text.clear();
+                            is_str = false;
+                        } else {
+                            text.clear();
+                            is_str = true;
+                        }
+                    }
+                    c if is_str => {
+                        text.push(c);
+                    },
                     ' ' | '\t'  if !is_str => { 
                         if text.len() > 0 {
                             tokens.push(JackTokenizer::tokenize_string(text.clone().into_iter().collect()));
@@ -112,18 +125,8 @@ impl JackTokenizer {
                             tokens.push(Token::Symbol(c));                        
                         }                                 
                     },
-                    '"' => {
-                        if is_str {
-                            tokens.push(Token::String( text.clone().into_iter().collect() ));
-                            text.clear();
-                            is_str = false;
-                        } else {
-                            text.clear();
-                            is_str = true;
-                        }
-                    }
-                    _ => {
-                        text.push(c);
+                    err => {
+                        panic!("Unexpected toekn {}", err)
                     }
                 }
             }
@@ -133,8 +136,11 @@ impl JackTokenizer {
     }
 }
 
-pub trait CompilationEngine {
-    fn compile_class(&mut self);
+pub trait CompilationEngine<T> {
+    const BINARY_OP :&'static [char] = &['+','-','*','/','&','|','<','>','='];
+    const UNARY_OP :&'static [char] = &['-','~'];
+
+    fn compile_class(&mut self) -> Vec<T>;
     fn compile_class_var_dec(&mut self);
     fn compile_subroutine(&mut self);
     fn compile_parameter_list(&mut self);

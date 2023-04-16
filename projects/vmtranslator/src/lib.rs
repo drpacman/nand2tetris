@@ -8,7 +8,7 @@ use assembler::Instruction;
 use std::fmt;
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone )]
 pub enum VMInstruction {
     CReturn,
     CArithmetic{ cmd : String },
@@ -27,7 +27,7 @@ impl fmt::Display for VMInstruction {
             Self::CArithmetic { ref cmd } => write!(f, "{}", cmd),
             Self::CPush { ref segment, ref value } => write!(f, "push {} {}", segment, value),
             Self::CPop { ref segment, ref value } => write!(f, "pop {} {}", segment, value),
-            Self::CLabel { ref label } => write!(f, "({})", label),
+            Self::CLabel { ref label } => write!(f, "label {}", label),
             Self::CGoto { ref label }  => write!(f, "goto {}", label),                     
             Self::CIf { ref label} => write!(f, "if-goto {}", label),
             Self::CFunction { ref symbol, ref n_vars} => write!(f, "function {} {}", symbol, n_vars),

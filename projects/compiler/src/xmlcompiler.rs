@@ -1,29 +1,42 @@
 
 use crate::compiler;
-
-use std::error::Error;
-use std::fs::File;
-use std::io::Read;
 use std::iter::{ Iterator, Peekable };
-
 use compiler::{Token, KeyWord};
 
 pub struct XMLCompilationEngine<T> where T:Iterator {
-    tokens : Peekable<T>
+    tokens : Peekable<T>,
+    output: Vec<String>
 }
 
 impl<T: Iterator<Item=Token>> XMLCompilationEngine<T> {
-    const binary_op :&'static [char] = &['+','-','*','/','&','|','<','>','='];
-    const unary_op :&'static [char] = &['-','~'];
 
     pub fn new(tokens : Peekable<T>) -> XMLCompilationEngine<T> {
-        XMLCompilationEngine { tokens }
+        XMLCompilationEngine { 
+            tokens,
+            output : vec![] 
+        }
+    }
+
+    fn add_node(&mut self, node : &str, value: String){
+        self.output.push(format!("<{}> {:?} </{}>", node, value, node));
+    }
+
+    fn add_keyword_node(&mut self, keyword: KeyWord){
+        self.output.push(format!("<keyword> {:?} </keyword>", keyword));
+    }
+
+    fn open_node(&mut self, node : &str){
+        self.output.push(format!("<{}>", node));
+    }
+
+    fn close_node(&mut self, node : &str){
+        self.output.push(format!("</{}>", node));
     }
 
     fn process_keyword(&mut self, value : KeyWord){
         match self.tokens.next() {
             Some(Token::KeyWord(k)) if k == value => {
-                println!("<keyword> {:?} </keyword>", value);  
+                self.add_keyword_node(value);
             },
             invalid => panic!("Parser error - expected keyword {:?}, got {:?}", value, invalid)
         }
@@ -32,7 +45,7 @@ impl<T: Iterator<Item=Token>> XMLCompilationEngine<T> {
     fn process_symbol(&mut self, value : char){
         match self.tokens.next() {
             Some(Token::Symbol(c)) if c == value => {
-                println!("<symbol> {} </symbol>", value);  
+                self.add_node("symbol", value.to_string());
             },
             invalid => panic!("Parser error - expected symbol {}, got {:?}", value, invalid)
         }
@@ -41,7 +54,7 @@ impl<T: Iterator<Item=Token>> XMLCompilationEngine<T> {
     fn process_identifier(&mut self){
         match self.tokens.next() {
             Some(Token::Identifier(id)) => {
-                println!("<identifier> {} </identifier>", id);  
+                self.add_node("identifier", id);
             },
             invalid => panic!("Parser error - expected identifier, got {:?}", invalid)
         }
@@ -62,17 +75,17 @@ impl<T: Iterator<Item=Token>> XMLCompilationEngine<T> {
         match type_token {
             Some(Token::KeyWord(k)) 
                 if k == KeyWord::Int || k == KeyWord::Char || k==KeyWord::Boolean  
-                    => { println!("<keyword> {:?} </keyword>", k) },
-            Some(Token::Identifier(id)) => println!("<identifier> {} </identifier>", id),
+                    => {  self.add_keyword_node(k) },
+            Some(Token::Identifier(id)) => self.add_node("identifier", id),
             _ => panic!("missing type token")
         }      
     }
 }
 
-impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngine<T> {
+impl<T: Iterator<Item=Token>> compiler::CompilationEngine<String> for XMLCompilationEngine<T> {
     
-    fn compile_class(&mut self){
-        println!("<class>");
+    fn compile_class(&mut self) -> Vec<String> {
+        self.open_node("class");
         self.process_keyword(KeyWord::Class);
         self.process_identifier();
         self.process_symbol('{');
@@ -93,7 +106,8 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngi
                 err => panic!("Unexpected class {:?}", err)
             }
         }
-        println!("</class>");                        
+        self.close_node("class");  
+        self.output.clone()                             
     }
     
     fn compile_class_var_dec(&mut self){
@@ -109,20 +123,20 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngi
 
     fn compile_var_dec(&mut self) {
         while let Some(Token::KeyWord(KeyWord::Var)) = self.tokens.peek() {
-            println!("<varDec>");
+            self.open_node("varDec");      
             self.process_keyword(KeyWord::Var);
             self.compile_type_dec();
-            println!("</varDec>");        
+            self.close_node("varDec");      
         }
     }
         
     fn compile_subroutine(&mut self){
-        println!("<subroutineDec>");
         if let Some(Token::KeyWord(k)) = self.tokens.next() {
-            println!("<keyword> {:?} </keyword>", k);
+            self.open_node("subroutineDec");      
+            self.add_keyword_node(k);
             match self.tokens.next().unwrap() {
-                Token::KeyWord(k) => println!("<keyword> {:?} </keyword>", k),
-                Token::Identifier(i) => println!("<identifier> {} </identifier>", i),
+                Token::KeyWord(k) => self.add_keyword_node(k),
+                Token::Identifier(i) => self.add_node("identifier", i),
                 err => panic!("Unexpected token for subroutine type {:?}", err)
             }
             self.process_identifier();
@@ -130,29 +144,33 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngi
             self.compile_parameter_list();
             self.process_symbol(')');
             self.compile_subroutine_body(); 
-            println!("</subroutineDec>");   
+            self.close_node("subroutineDec");             
         } else {
             panic!("Missing keyword for subroutine dec");
         }       
     }    
 
     fn compile_parameter_list(&mut self){
-       println!("<parameterList>");
+        self.open_node("parameterList");                  
         loop {
             match self.tokens.peek() {
                 Some(Token::Symbol(')')) => break,
                 Some(Token::Symbol(',')) => self.process_symbol(','),
                 _ => {
                     self.compile_type();
-                    println!("<identifier> {:?} </identifier>", self.tokens.next().unwrap());                    
+                    if let Some(Token::Identifier(id)) = self.tokens.next() {
+                        self.add_node("identifier", id);  
+                    } else {
+                        panic!("Missing identifier for param list")
+                    }
                 }
             }
         }
-        println!("</parameterList>");        
+        self.close_node("parameterList");                  
     }
 
     fn compile_statements(&mut self){
-        println!("<statements>");  
+        self.open_node("statements");                  
         loop {
             match self.tokens.peek() {
                 Some(Token::KeyWord(KeyWord::Let)) => self.compile_let(),
@@ -164,20 +182,20 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngi
                 _ => panic!("Missing statement token - found {:?}", self.tokens.peek())           
             }
         }
-        println!("</statements>");        
+        self.close_node("statements");                                
     }
 
     fn compile_subroutine_body(&mut self){
-        println!("<subroutineBody>");                
+        self.open_node("subroutineBody");                
         self.process_symbol('{');
         self.compile_var_dec();
         self.compile_statements();
         self.process_symbol('}');
-        println!("</subroutineBody>");                
+        self.close_node("subroutineBody");                
     }
 
     fn compile_do(&mut self){
-        println!("<doStatement>");  
+        self.open_node("doStatement");  
         self.process_keyword(KeyWord::Do);
         self.process_identifier();        
         match self.tokens.peek().unwrap() {
@@ -198,7 +216,7 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngi
             }
         }
         self.process_symbol(';'); 
-        println!("</doStatement>");                 
+        self.close_node("doStatement");          
     }    
 
     fn compile_if(&mut self){
@@ -218,7 +236,7 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngi
     }
 
     fn compile_let(&mut self){
-        println!("<letStatement>");  
+        self.open_node("letStatement");
         self.process_keyword(KeyWord::Let);
         self.process_identifier();        
         if let Some(Token::Symbol('[')) = self.tokens.peek() {
@@ -229,11 +247,11 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngi
         self.process_symbol('=');
         self.compile_expression();
         self.process_symbol(';');
-        println!("</letStatement>");
+        self.close_node("letStatement");
     }
 
     fn compile_while(&mut self){
-        println!("<whileStatement>");  
+        self.open_node("whileStatement");
         self.process_keyword(KeyWord::While);
         self.process_symbol('(');
         self.compile_expression();
@@ -242,11 +260,11 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngi
         self.process_symbol('{');
         self.compile_statements();
         self.process_symbol('}');
-        println!("</whileStatement>");          
+        self.close_node("whileStatement");                
     }    
 
     fn compile_return(&mut self){
-        println!("<returnStatement>");
+        self.open_node("returnStatement");
         self.process_keyword(KeyWord::Return);
         match self.tokens.peek() {
             Some(Token::Symbol(c)) if *c == ';' => {
@@ -257,11 +275,11 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngi
                 self.process_symbol(';');
             }
         }
-        println!("</returnStatement>");        
+        self.close_node("returnStatement");        
     }   
 
     fn compile_expression_list(&mut self) -> u8 {
-        println!("<expressionList>");
+        self.open_node("expressionList");        
         let mut expression_count = 0;
         loop {
             if let Some(Token::Symbol(')')) = self.tokens.peek() {
@@ -273,47 +291,48 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngi
                 self.process_symbol(',');
             }
         }
-        println!("</expressionList>");  
+        self.close_node("expressionList");        
         expression_count      
     }
     
     fn compile_expression(&mut self) {
-        println!("<expression>");
+        self.open_node("expression");        
         self.compile_term();
         match self.tokens.peek() {
-            Some(Token::Symbol(c)) if XMLCompilationEngine::<T>::binary_op.contains(c) => {
+            Some(Token::Symbol(c)) if XMLCompilationEngine::<T>::BINARY_OP.contains(c) => {
                 if *c == '<' {
-                    println!("<symbol> &lt; </symbol>");   
+                    self.add_node("symbol", "&lt".to_string());
                 } else if *c == '>' {
-                    println!("<symbol> &gt; </symbol>");   
+                    self.add_node("symbol", "&gt".to_string());  
                 } else {
-                    println!("<symbol> {} </symbol>", c);   
+                    let symbol = c.to_string();
+                    self.add_node("symbol", symbol);
                 }
                 self.tokens.next();        
                 self.compile_term();
             },
             _ => {}
         }
-        println!("</expression>");        
+        self.close_node("expression");                       
     }
 
     fn compile_term(&mut self) {
-        println!("<term>");
+        self.open_node("term");
         let token = self.tokens.next().unwrap();
         match token {
-            Token::Int(i) => { println!("<integerConstant> {:?} </integerConstant>", i);},
-            Token::String(s) => { println!("<stringConstant> {:?} </stringConstant>", s);},
-            Token::KeyWord(k) => { println!("<keyword> {:?} </keyword>", k); },
+            Token::Int(i) => self.add_node("integerConstant", i.to_string()),
+            Token::String(s) => self.add_node("stringConstant", s),
+            Token::KeyWord(k) => self.add_keyword_node(k),
             Token::Symbol('(') => { 
                 self.compile_expression();
                 self.process_symbol(')');  
             },
-            Token::Symbol(s) if XMLCompilationEngine::<T>::unary_op.contains(&s) => {
-                println!("<symbol> {} </symbol>", s);
+            Token::Symbol(s) if XMLCompilationEngine::<T>::UNARY_OP.contains(&s) => {
+                self.add_node("symbol", s.to_string());
                 self.compile_term();
             },            
             Token::Identifier(id) => {
-                println!("<identifier> {} </identifier>", id);                        
+                self.add_node("identifier", id);                        
                 match self.tokens.peek().unwrap() {
                     Token::Symbol(s) if *s == '[' => {
                         self.process_symbol('[');
@@ -326,7 +345,8 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngi
                         self.process_symbol(')');                        
                     },
                     Token::Symbol(s) if *s == '.' => {
-                        println!("<symbol> . </symbol>");
+                        let symbol = s.to_string();
+                        self.add_node("symbol", symbol);
                         self.tokens.next();
                         self.process_identifier();        
                         self.process_symbol('(');
@@ -337,9 +357,10 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine for XMLCompilationEngi
                 }
             },
             _ => {
-                panic!("Unexpected token {:?}", token)
+                panic!("Unexpected token {:?} - instruction were {:?}", token, self.output)
+
             }
         }
-        println!("</term>");        
+        self.close_node("term");        
     }
 }
