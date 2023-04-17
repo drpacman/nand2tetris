@@ -92,11 +92,11 @@ impl<T: Iterator<Item=Token>> VMCompiler<T> {
         if self.class_symbol_table.get(&name).is_none() {
             match kind.as_str() {
                 "static" => {
-                    self.class_symbol_table.insert(name, SymbolTableEntry { symbol_type: field_type, kind: "this".to_string(), index: self.static_symbol_counter });
+                    self.class_symbol_table.insert(name, SymbolTableEntry { symbol_type: field_type, kind: "static".to_string(), index: self.static_symbol_counter });
                     self.static_symbol_counter+=1;                
                 },
                 "field" => {
-                    self.class_symbol_table.insert(name, SymbolTableEntry { symbol_type: field_type, kind: "field".to_string(), index: self.field_symbol_counter });
+                    self.class_symbol_table.insert(name, SymbolTableEntry { symbol_type: field_type, kind: "this".to_string(), index: self.field_symbol_counter });
                     self.field_symbol_counter+=1;                
                 },
                 err => panic!("Unexpected registration kind for class {:?}", err)
