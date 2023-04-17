@@ -2,11 +2,31 @@
 use crate::compiler;
 use std::iter::{ Iterator, Peekable };
 use compiler::{Token, KeyWord};
+use std::fs::File;
+use std::io::prelude::*;
+
+pub struct XMLWriter {
+    filename : String
+}
+
+impl XMLWriter {
+    pub fn new(filestem : &str) -> XMLWriter {
+        XMLWriter { 
+            filename:  format!("{}.xml", filestem)
+        }
+    }
+
+    pub fn write(&self, ins : &Vec<String>) {
+        let mut f = File::create(&self.filename).expect("unable to create file");
+        write!(f, "{}", ins.join("\r")).expect("Failed to write XML to file")
+    }
+}
 
 pub struct XMLCompilationEngine<T> where T:Iterator {
     tokens : Peekable<T>,
     output: Vec<String>
 }
+
 
 impl<T: Iterator<Item=Token>> XMLCompilationEngine<T> {
 
@@ -18,7 +38,7 @@ impl<T: Iterator<Item=Token>> XMLCompilationEngine<T> {
     }
 
     fn add_node(&mut self, node : &str, value: String){
-        self.output.push(format!("<{}> {:?} </{}>", node, value, node));
+        self.output.push(format!("<{}> {} </{}>", node, value, node));
     }
 
     fn add_keyword_node(&mut self, keyword: KeyWord){
@@ -106,7 +126,7 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine<String> for XMLCompila
                 err => panic!("Unexpected class {:?}", err)
             }
         }
-        self.close_node("class");  
+        self.close_node("class");
         self.output.clone()                             
     }
     
@@ -301,9 +321,9 @@ impl<T: Iterator<Item=Token>> compiler::CompilationEngine<String> for XMLCompila
         match self.tokens.peek() {
             Some(Token::Symbol(c)) if XMLCompilationEngine::<T>::BINARY_OP.contains(c) => {
                 if *c == '<' {
-                    self.add_node("symbol", "&lt".to_string());
+                    self.add_node("symbol", "&lt;".to_string());
                 } else if *c == '>' {
-                    self.add_node("symbol", "&gt".to_string());  
+                    self.add_node("symbol", "&gt;".to_string());  
                 } else {
                     let symbol = c.to_string();
                     self.add_node("symbol", symbol);

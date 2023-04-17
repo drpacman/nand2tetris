@@ -95,11 +95,11 @@ impl JackTokenizer {
                             text.clear();
                             is_str = true;
                         }
-                    }
+                    },
                     c if is_str => {
                         text.push(c);
                     },
-                    ' ' | '\t'  if !is_str => { 
+                    ' ' | '\t' | '\r' => { 
                         if text.len() > 0 {
                             tokens.push(JackTokenizer::tokenize_string(text.clone().into_iter().collect()));
                         }
@@ -125,8 +125,8 @@ impl JackTokenizer {
                             tokens.push(Token::Symbol(c));                        
                         }                                 
                     },
-                    err => {
-                        panic!("Unexpected toekn {}", err)
+                    c => {
+                        text.push(c);
                     }
                 }
             }

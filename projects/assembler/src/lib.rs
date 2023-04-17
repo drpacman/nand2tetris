@@ -1,6 +1,5 @@
 use std::fs::File;
 use std::io::prelude::*;
-use std::env;
 use std::collections::HashMap;
 use std::io::Write;
 use std::fmt;

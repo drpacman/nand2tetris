@@ -1,7 +1,5 @@
 use std::fs::File;
 use std::io::prelude::*;
-use std::env;
-// use std::io::Write;
 use regex::Regex;
 use lazy_static::lazy_static;
 use assembler::Instruction;
@@ -263,7 +261,7 @@ impl Compiler {
             },
             VMInstruction::CFunction { symbol, n_vars } => {
                 output.push(Instruction::LInstruction { symbol: symbol.to_string() });
-                for i in 0..*n_vars {
+                for _ in 0..*n_vars {
                     Compiler::push_value(0, &mut output);
                 }
             },

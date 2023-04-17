@@ -34,7 +34,7 @@ impl VMWriter {
     pub fn write(&self, ins : &Vec<VMInstruction>) {
         let mut f = File::create(&self.filename).expect("unable to create file");
         let asm : Vec<String> = ins.iter().map(|i| i.to_string()).collect();
-        write!(f, "{}", asm.join("\r")).expect("Failed to write ASM to file")
+        write!(f, "{}", asm.join("\r")).expect("Failed to write VM instructions to file")
     }
 }
 
@@ -75,7 +75,7 @@ impl<T: Iterator<Item=Token>> VMCompiler<T> {
 
     fn consume_keyword(&mut self, keyword : KeyWord) {
         match self.tokens.next() {
-            Some(Token::KeyWord(keyword)) => {}
+            Some(Token::KeyWord(k)) if k == keyword => {}
             invalid => panic!("Parser error - expected keyword, got {:?}", invalid)
         }
     }    
@@ -89,39 +89,33 @@ impl<T: Iterator<Item=Token>> VMCompiler<T> {
     }
     
     fn register_class_symbol(&mut self, kind: String, field_type: String, name: String){
-        match self.class_symbol_table.get(&name) {
-            Some(e) => {},
-            None => {
-                match kind.as_str() {
-                    "static" => {
-                        self.class_symbol_table.insert(name, SymbolTableEntry { symbol_type: field_type, kind: "this".to_string(), index: self.static_symbol_counter });
-                        self.static_symbol_counter+=1;                
-                    },
-                    "field" => {
-                        self.class_symbol_table.insert(name, SymbolTableEntry { symbol_type: field_type, kind: "field".to_string(), index: self.field_symbol_counter });
-                        self.field_symbol_counter+=1;                
-                    },
-                    err => panic!("Unexpected registration kind for class {:?}", err)
-                }
-            }           
+        if self.class_symbol_table.get(&name).is_none() {
+            match kind.as_str() {
+                "static" => {
+                    self.class_symbol_table.insert(name, SymbolTableEntry { symbol_type: field_type, kind: "this".to_string(), index: self.static_symbol_counter });
+                    self.static_symbol_counter+=1;                
+                },
+                "field" => {
+                    self.class_symbol_table.insert(name, SymbolTableEntry { symbol_type: field_type, kind: "field".to_string(), index: self.field_symbol_counter });
+                    self.field_symbol_counter+=1;                
+                },
+                err => panic!("Unexpected registration kind for class {:?}", err)
+            }
         }
     }
 
     fn register_subroutine_symbol(&mut self, kind: String, field_type: String, name: String){
-        match self.subroutine_symbol_table.get(&name) {
-            Some(e) => {},
-            None => {
-                match kind.as_str() {
-                    "local" => {
-                        self.subroutine_symbol_table.insert(name, SymbolTableEntry { symbol_type: field_type, kind: "local".to_string(), index: self.local_symbol_counter});
-                        self.local_symbol_counter+=1;                
-                    },
-                    "argument" => {
-                        self.subroutine_symbol_table.insert(name, SymbolTableEntry { symbol_type: field_type, kind: "argument".to_string(), index: self.arg_symbol_counter });
-                        self.arg_symbol_counter+=1;                
-                    },
-                    err => panic!("Unexpected registration kind for subroutine {:?}", err)
-                }
+        if self.subroutine_symbol_table.get(&name).is_none() {
+            match kind.as_str() {
+                "local" => {
+                    self.subroutine_symbol_table.insert(name, SymbolTableEntry { symbol_type: field_type, kind: "local".to_string(), index: self.local_symbol_counter});
+                    self.local_symbol_counter+=1;                
+                },
+                "argument" => {
+                    self.subroutine_symbol_table.insert(name, SymbolTableEntry { symbol_type: field_type, kind: "argument".to_string(), index: self.arg_symbol_counter });
+                    self.arg_symbol_counter+=1;                
+                },
+                err => panic!("Unexpected registration kind for subroutine {:?}", err)
             }           
         }
     }
@@ -199,7 +193,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
         self.instruction_buffer.clear();
 
         let sub_routine_type = self.tokens.next().unwrap();
-        let mut has_return_type = self.tokens.next().unwrap() != Token::KeyWord(KeyWord::Void);
+        let has_return_type = self.tokens.next().unwrap() != Token::KeyWord(KeyWord::Void);
         let id = self.process_identifier();        
         match sub_routine_type {
             Token::KeyWord(KeyWord::Function) => {}
@@ -244,7 +238,10 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
         self.compile_parameter_list();
         self.consume_symbol(')');
         self.compile_subroutine_body(); 
-
+        // drop the value returned
+        if !has_return_type {
+            self.instruction_buffer.push(VMInstruction::CPop{ segment: "temp".to_string(), value: 0 })
+        }
         let class_name = self.class_name.as_ref().unwrap();
         self.instructions.push(
             VMInstruction::CFunction{ 
@@ -558,6 +555,9 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
                             VMInstruction::CArithmetic{ cmd: "add".to_string() }
                         );
                         self.instruction_buffer.push( 
+                            VMInstruction::CPop{ segment : "pointer".to_string(), value: 1 } 
+                        );                        
+                        self.instruction_buffer.push( 
                             VMInstruction::CPop{ segment : "that".to_string(), value: 0 } 
                         );
                         self.consume_symbol(']');                        
@@ -589,9 +589,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
                     }
                 }
             },
-            _ => {
-                panic!("Unexpected token {:?} - last instruction was {:?}", token, self.instruction_buffer.last().unwrap())
-            }
+            _ => {}
         }
     }
 }   
