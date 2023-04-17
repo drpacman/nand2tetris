@@ -503,7 +503,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
                         VMInstruction::CPush{ segment: "constant".to_string(), value: c as u16 }
                     );
                     self.instruction_buffer.push(
-                        VMInstruction::CCall { symbol: "String.appendChar".to_string(), n_args: 1 }
+                        VMInstruction::CCall { symbol: "String.appendChar".to_string(), n_args: 2 }
                     );
                 }                
             },
@@ -558,7 +558,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
                             VMInstruction::CPop{ segment : "pointer".to_string(), value: 1 } 
                         );                        
                         self.instruction_buffer.push( 
-                            VMInstruction::CPop{ segment : "that".to_string(), value: 0 } 
+                            VMInstruction::CPush{ segment : "that".to_string(), value: 0 } 
                         );
                         self.consume_symbol(']');                        
                     },
