@@ -47,7 +47,7 @@ impl<T: Iterator<Item=Token>> VMCompiler<T> {
             subroutine_symbol_table: HashMap::new(),
             static_symbol_counter: 0,
             field_symbol_counter: 0,
-            arg_symbol_counter: 1,    
+            arg_symbol_counter: 0,    
             local_symbol_counter: 0,
             class_name : None,
             instruction_buffer : vec![],
@@ -80,7 +80,7 @@ impl<T: Iterator<Item=Token>> VMCompiler<T> {
         }
     }    
     
-    fn lookup_symbol(&mut self, name: &String) -> Option<&SymbolTableEntry> {
+    fn lookup_symbol(&self, name: &String) -> Option<&SymbolTableEntry> {
         if self.subroutine_symbol_table.contains_key(name) {
             self.subroutine_symbol_table.get(name)
         } else {
@@ -129,8 +129,7 @@ impl<T: Iterator<Item=Token>> VMCompiler<T> {
             Some(Token::Identifier(id)) => id,
             _ => panic!("missing type token")
         }      
-    }
-
+    }    
 }
 
 struct SymbolTableEntry {
@@ -139,10 +138,10 @@ struct SymbolTableEntry {
     index : u8
 }
 
-impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T> {
+impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T> {        
     fn compile_class(&mut self) -> Vec<VMInstruction> {
         self.consume_keyword(KeyWord::Class);
-        self.class_name = Some(self.process_identifier());
+        self.class_name = Some(self.process_identifier());        
         self.consume_symbol('{');
         loop {
             match self.tokens.peek() {
@@ -200,36 +199,21 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
             Token::KeyWord(KeyWord::Method) => {   
                 self.register_subroutine_symbol("argument".to_string(), self.class_name.as_ref().unwrap().clone(), "this".to_string());             
                 self.instruction_buffer.push(
-                    VMInstruction::CPush{ 
-                        segment: "argument".to_string(), 
-                        value: 0 
-                    }
+                    VMInstruction::CPush{ segment: "argument".to_string(), value: 0 }
                 );
                 self.instruction_buffer.push(
-                    VMInstruction::CPop{ 
-                        segment: "pointer".to_string(), 
-                        value: 0
-                    }
+                    VMInstruction::CPop{  segment: "pointer".to_string(),  value: 0 }
                 );
             },
             Token::KeyWord(KeyWord::Constructor) => {
                 self.instruction_buffer.push(
-                    VMInstruction::CPush{ 
-                        segment: "constant".to_string(), 
-                        value: 2
-                    }
+                    VMInstruction::CPush{ segment: "constant".to_string(), value: 2 }
                 );
                 self.instruction_buffer.push(
-                    VMInstruction::CCall{ 
-                        symbol: "Memory.alloc".to_string(), 
-                        n_args: 1
-                    }
+                    VMInstruction::CCall{ symbol: "Memory.alloc".to_string(), n_args: 1 }
                 );
                 self.instruction_buffer.push(
-                    VMInstruction::CPop{ 
-                        segment: "pointer".to_string(), 
-                        value: 0
-                    }
+                    VMInstruction::CPop{ segment: "pointer".to_string(), value: 0 }
                 );
             },
             err => panic!("Unexpected subroutine type {:?}", err)
@@ -308,22 +292,9 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
 
     fn compile_do(&mut self){
         self.consume_keyword(KeyWord::Do);
-        let id = self.process_identifier();        
-        let full_id = match self.tokens.peek().unwrap() {
-            Token::Symbol(s) if *s == '(' => id,
-            Token::Symbol(s) if *s == '.' => {
-                self.consume_symbol('.');
-                format!("{}.{}", id, self.process_identifier())
-            },
-            _ => {
-                panic!("Unexpected subroutine call token {:?}", self.tokens.peek())
-            }
-        };
-        self.consume_symbol('(');
-        let n_args = self.compile_expression_list();
-        self.consume_symbol(')');
-        self.instruction_buffer.push(
-            VMInstruction::CCall { symbol : full_id,  n_args: n_args as u16 }
+        self.compile_expression();
+        self.instruction_buffer.push (
+            VMInstruction::CPop { segment: "temp".to_string(), value: 0 }
         );
         self.consume_symbol(';'); 
     }    
@@ -563,18 +534,47 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
                         self.consume_symbol(']');                        
                     },
                     Token::Symbol(s) if *s == '.' => {
-                        let symbol_type = match self.lookup_symbol(&id) {
-                            Some(entry) => entry.symbol_type.clone(),
-                            None => id
-                        };
+                        let symbol_table_entry = self.lookup_symbol(&id);
+                        let mut class_name = id.clone();
+                        let method_instruction = symbol_table_entry.map( |entry| {
+                                class_name = entry.symbol_type.clone();
+                                VMInstruction::CPush{ segment: entry.kind.clone(), value : entry.index as u16 }
+                            }
+                        );
+                        
                         self.tokens.next();
-                        let method_name = self.process_identifier().clone(); 
+                        let function_name = self.process_identifier().clone(); 
                         self.consume_symbol('(');
-                        let n_args = self.compile_expression_list();
+                        // push ref to instance if needed
+                        let n_args = if let Some(ins) = method_instruction {
+                            self.instruction_buffer.push( ins );
+                            self.compile_expression_list() + 1
+                        } else {   
+                            self.compile_expression_list()
+                        };                
+                        // call function
                         self.instruction_buffer.push( 
                             VMInstruction::CCall{ 
-                                symbol : format!("{}.{}", &symbol_type, method_name),
+                                symbol : format!("{}.{}", class_name, function_name),
                                 n_args : n_args as u16
+                            }
+                        );
+                        self.consume_symbol(')');   
+                    },
+                    Token::Symbol(s) if *s == '(' => {
+                        self.consume_symbol('(');                           
+                        let class_name = self.class_name.as_ref().unwrap().clone();
+                        // push pointer to current object
+                        self.instruction_buffer.push( 
+                            VMInstruction::CPush{ segment : "pointer".to_string(), value: 0 }
+                        );
+                        // add the args
+                        let n_args = self.compile_expression_list();
+                        // call the method
+                        self.instruction_buffer.push( 
+                            VMInstruction::CCall{ 
+                                symbol : format!("{}.{}", &class_name, id),
+                                n_args : (n_args as u16) + 1
                             }
                         );
                         self.consume_symbol(')');   

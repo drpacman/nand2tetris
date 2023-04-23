@@ -50,7 +50,7 @@ impl VMInstructionParser {
         let mut contents = String::new();
         f.read_to_string(&mut contents)?;
         let lines = contents.to_string()
-                            .split('\n')
+                            .split('\r')
                             .filter_map(|s| VMInstructionParser::read_instruction(s))
                             .collect();
         Ok(lines)
