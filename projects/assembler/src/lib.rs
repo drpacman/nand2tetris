@@ -8,7 +8,7 @@ use std::fmt;
 pub enum Instruction {
     Comment { contents : String },
     LInstruction{ symbol : String },
-    AInstruction{ symbol : Option<String>, value: Option<u16> },
+    AInstruction{ symbol : Option<String>, value: Option<u32> },
     CInstruction{ dest: Option<String>, comp: String, jump: Option<String> }
 }
 
@@ -92,7 +92,7 @@ impl Parser {
                 let mut iter = ins.chars();
                 iter.next();
                 let symbol = iter.collect::<String>();
-                match symbol.parse::<u16>() {
+                match symbol.parse::<u32>() {
                     Ok(value) => Instruction::AInstruction { symbol: None, value: Some(value) },
                     Err(_) => Instruction::AInstruction { symbol: Some(symbol), value: None }
                 }            
@@ -122,12 +122,12 @@ impl Parser {
 }
 
 pub struct Assembler {
-    symbol_table : HashMap<String, u16>
+    symbol_table : HashMap<String, u32>
 }
 
 impl Assembler {
     pub fn new() -> Assembler {
-        let mut symbol_table = HashMap::<String, u16>::new();
+        let mut symbol_table = HashMap::<String, u32>::new();
         for r in 0..15 {
             symbol_table.insert(format!("R{}", r), r);
         }  
@@ -144,13 +144,13 @@ impl Assembler {
         Assembler { symbol_table }
     }
 
-    pub fn assemble(&mut self, instructions : &Vec<Instruction>) -> Vec<u16> {
+    pub fn assemble(&mut self, instructions : &Vec<Instruction>) -> Vec<u32> {
         self.populate_symbol_table(instructions);
         self.generate_binary_code(instructions)
     }
 
     fn populate_symbol_table(&mut self, instructions : &Vec<Instruction>){
-        let mut line_num = 0;
+        let mut line_num : u32 = 0;
         // pass 1 - handle label symbols
         let mut ins_iter = instructions.iter();
         while let Some(instruction) = ins_iter.next() {
@@ -181,8 +181,8 @@ impl Assembler {
         }
     }
 
-    fn generate_binary_code(&self, instructions : &Vec<Instruction>) -> Vec<u16> {
-        fn dest_code(c : &Option<String>) -> u16 {
+    fn generate_binary_code(&self, instructions : &Vec<Instruction>) -> Vec<u32> {
+        fn dest_code(c : &Option<String>) -> u32 {
             match c.as_deref() {
                 None => 0,
                 Some("M") => 1,
@@ -196,7 +196,7 @@ impl Assembler {
             }
         }
         
-        fn jump_code(c : &Option<String>) -> u16 {
+        fn jump_code(c : &Option<String>) -> u32 {
             match c.as_deref() {
                 None => 0,
                 Some("JGT") => 1,
@@ -210,7 +210,7 @@ impl Assembler {
             }
         }
         
-        fn comp_code(c : &String) -> u16 {
+        fn comp_code(c : &String) -> u32 {
             match c.as_str() {
                 "0" =>  0b0101010,
                 "1" =>  0b0111111,
@@ -244,14 +244,14 @@ impl Assembler {
             }
         }
         
-        let mut output = Vec::<u16>::new();
+        let mut output = Vec::<u32>::new();
         let mut iter = instructions.iter();
         while let Some(ins) = iter.next() {
             match ins {
                 Instruction::AInstruction{ symbol : Some(symbol), value: _ } => output.push( *self.symbol_table.get(symbol).unwrap() ),
                 Instruction::AInstruction{ symbol : None, value: v } => output.push( v.unwrap() ),
                 Instruction::CInstruction{ dest, comp, jump } => {
-                    let value : u16 = (0b111 << 13) + (comp_code(comp) << 6) + (dest_code(dest) << 3) + jump_code(jump);
+                    let value : u32 = (0b111 << 13) + (comp_code(comp) << 6) + (dest_code(dest) << 3) + jump_code(jump);
                     output.push(value);
                 }
                 _ => {}            
@@ -273,8 +273,8 @@ impl AssemblyWriter {
         }
     }
 
-    pub fn write(&self, compiled : Vec<u16>) {
-        fn u16_to_string(i : u16) -> String {
+    pub fn write(&self, compiled : Vec<u32>) {
+        fn u32_to_string(i : u32) -> String {
             let mut out = Vec::<char>::new();
             for n in 0..16 {
                 if i & (1<<n) > 0 {
@@ -287,7 +287,7 @@ impl AssemblyWriter {
         }
         
         let mut f = File::create(&self.filename).expect("unable to create file");
-        let hack : Vec<String> = compiled.iter().map(|i| u16_to_string(*i)).collect();
+        let hack : Vec<String> = compiled.iter().map(|i| u32_to_string(*i)).collect();
         write!(f, "{}", hack.join("\r")).expect("Failed to write to file");    
     }   
 }

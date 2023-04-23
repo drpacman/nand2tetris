@@ -16,8 +16,8 @@ pub struct VMCompiler<T> where T:Iterator {
     class_name : Option<String>,
     instruction_buffer : Vec<VMInstruction>,
     instructions : Vec<VMInstruction>,
-    while_counter : u16,
-    if_counter: u16
+    while_counter : u32,
+    if_counter: u32
 }
 
 pub struct VMWriter {
@@ -207,7 +207,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
             },
             Token::KeyWord(KeyWord::Constructor) => {
                 self.instruction_buffer.push(
-                    VMInstruction::CPush{ segment: "constant".to_string(), value: self.field_symbol_counter as u16 }
+                    VMInstruction::CPush{ segment: "constant".to_string(), value: self.field_symbol_counter as u32 }
                 );
                 self.instruction_buffer.push(
                     VMInstruction::CCall{ symbol: "Memory.alloc".to_string(), n_args: 1 }
@@ -230,7 +230,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
         self.instructions.push(
             VMInstruction::CFunction{ 
                 symbol: format!("{}.{}", class_name, id).to_string(), 
-                n_vars: self.local_symbol_counter as u16
+                n_vars: self.local_symbol_counter as u32
             }
         );
         self.instructions.append(&mut self.instruction_buffer); 
@@ -340,7 +340,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
         let kind = target.kind.clone();
         let index = target.index.clone();
         if let Some(Token::Symbol('[')) = self.tokens.peek() {
-            self.instruction_buffer.push(VMInstruction::CPush { segment: kind, value: index as u16});
+            self.instruction_buffer.push(VMInstruction::CPush { segment: kind, value: index as u32});
             self.consume_symbol('[');
             self.compile_expression();
             self.instruction_buffer.push(VMInstruction::CArithmetic { cmd: "add".to_string() });
@@ -354,7 +354,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
         } else {
             self.consume_symbol('=');
             self.compile_expression();
-            self.instruction_buffer.push(VMInstruction::CPop { segment: kind, value: index as u16 });            
+            self.instruction_buffer.push(VMInstruction::CPop { segment: kind, value: index as u32 });            
         }
         self.consume_symbol(';');
     }
@@ -463,18 +463,18 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
         let token = self.tokens.next().unwrap();
         match token {
             Token::Int(i) => self.instruction_buffer.push(
-                VMInstruction::CPush{ segment: "constant".to_string(), value: i as u16 }
+                VMInstruction::CPush{ segment: "constant".to_string(), value: i as u32 }
             ),
             Token::String(s) => { 
                 self.instruction_buffer.push(
-                    VMInstruction::CPush{ segment: "constant".to_string(), value: s.len() as u16 }
+                    VMInstruction::CPush{ segment: "constant".to_string(), value: s.len() as u32 }
                 );
                 self.instruction_buffer.push(
                     VMInstruction::CCall { symbol: "String.new".to_string(), n_args: 1 }
                 );
                 for c in s.chars() {
                     self.instruction_buffer.push(
-                        VMInstruction::CPush{ segment: "constant".to_string(), value: c as u16 }
+                        VMInstruction::CPush{ segment: "constant".to_string(), value: c as u32 }
                     );
                     self.instruction_buffer.push(
                         VMInstruction::CCall { symbol: "String.appendChar".to_string(), n_args: 2 }
@@ -521,7 +521,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
                         let segment = symbol_entry.kind.clone();
                         let value = symbol_entry.index;
                         self.instruction_buffer.push( 
-                            VMInstruction::CPush{ segment, value: value as u16 } 
+                            VMInstruction::CPush{ segment, value: value as u32 } 
                         );
                         self.consume_symbol('[');
                         self.compile_expression();
@@ -541,7 +541,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
                         let mut class_name = id.clone();
                         let method_instruction = symbol_table_entry.map( |entry| {
                                 class_name = entry.symbol_type.clone();
-                                VMInstruction::CPush{ segment: entry.kind.clone(), value : entry.index as u16 }
+                                VMInstruction::CPush{ segment: entry.kind.clone(), value : entry.index as u32 }
                             }
                         );
                         
@@ -559,7 +559,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
                         self.instruction_buffer.push( 
                             VMInstruction::CCall{ 
                                 symbol : format!("{}.{}", class_name, function_name),
-                                n_args : n_args as u16
+                                n_args : n_args as u32
                             }
                         );
                         self.consume_symbol(')');   
@@ -577,7 +577,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
                         self.instruction_buffer.push( 
                             VMInstruction::CCall{ 
                                 symbol : format!("{}.{}", &class_name, id),
-                                n_args : (n_args as u16) + 1
+                                n_args : (n_args as u32) + 1
                             }
                         );
                         self.consume_symbol(')');   
@@ -587,7 +587,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
                         let segment = symbol_entry.kind.clone();
                         let value = symbol_entry.index;
                         self.instruction_buffer.push( 
-                            VMInstruction::CPush{ segment, value: value as u16 }
+                            VMInstruction::CPush{ segment, value: value as u32 }
                         );
                     }
                 }

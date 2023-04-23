@@ -13,10 +13,10 @@ pub enum VMInstruction {
     CLabel{ label : String  },
     CGoto{ label : String  },
     CIf{ label : String  },
-    CPush{ segment : String , value: u16 },
-    CPop{ segment : String, value: u16 },
-    CFunction{ symbol : String, n_vars : u16 },
-    CCall{ symbol : String, n_args : u16 },
+    CPush{ segment : String , value: u32 },
+    CPop{ segment : String, value: u32 },
+    CFunction{ symbol : String, n_vars : u32 },
+    CCall{ symbol : String, n_args : u32 },
 }
 
 impl fmt::Display for VMInstruction {
@@ -93,7 +93,7 @@ impl VMInstructionParser {
         if FUN2_REGEX.is_match(&ins) {
             let captures = FUN2_REGEX.captures(&ins).unwrap();
             let arg1 = captures.get(2).unwrap().as_str().to_string();
-            let arg2 = captures.get(3).unwrap().as_str().parse::<u16>().unwrap();
+            let arg2 = captures.get(3).unwrap().as_str().parse::<u32>().unwrap();
             match captures.get(1).unwrap().as_str() {
                 "push" => VMInstruction::CPush{ segment: arg1, value: arg2 },
                 "pop" => VMInstruction::CPop{ segment: arg1, value: arg2 },
@@ -123,9 +123,9 @@ impl VMInstructionParser {
 }
 
 pub struct Compiler {
-    bool_symbol_counter : u16,
-    ret_symbol_count : u16,
-    static_base : u16
+    bool_symbol_counter : u32,
+    ret_symbol_count : u32,
+    static_base : u32
 }
 
 impl Compiler {
@@ -330,7 +330,7 @@ impl Compiler {
         Compiler::push_d(output);
     }
 
-    fn push_value(value : u16, output : &mut Vec<Instruction>) {
+    fn push_value(value : u32, output : &mut Vec<Instruction>) {
         output.push(Instruction::Comment { contents: format!("Push {}", value) });
         output.push(Instruction::AInstruction { symbol: None, value: Some(value) });
         output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None }); 
@@ -432,7 +432,7 @@ impl Compiler {
         output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });           
     }
 
-    pub fn call(&mut self, symbol: &str, n_args : u16, output : &mut Vec<Instruction>) {
+    pub fn call(&mut self, symbol: &str, n_args : u32, output : &mut Vec<Instruction>) {
         output.push(Instruction::Comment { contents: format!("call {} {}", symbol, n_args).to_string() });
         
         let return_label = format!("ret_{}", self.ret_symbol_count);
