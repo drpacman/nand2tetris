@@ -207,7 +207,7 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
             },
             Token::KeyWord(KeyWord::Constructor) => {
                 self.instruction_buffer.push(
-                    VMInstruction::CPush{ segment: "constant".to_string(), value: 2 }
+                    VMInstruction::CPush{ segment: "constant".to_string(), value: self.field_symbol_counter as u16 }
                 );
                 self.instruction_buffer.push(
                     VMInstruction::CCall{ symbol: "Memory.alloc".to_string(), n_args: 1 }
@@ -361,8 +361,10 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
 
     fn compile_while(&mut self){        
         self.consume_keyword(KeyWord::While);
+        let while_counter = self.while_counter;
+        self.while_counter += 1;
         self.instruction_buffer.push(
-            VMInstruction::CLabel{ label: format!("while_loop_{}", self.while_counter) }
+            VMInstruction::CLabel{ label: format!("while_loop_{}", while_counter) }
         );
         self.consume_symbol('(');
         self.compile_expression();
@@ -370,18 +372,19 @@ impl<T: Iterator<Item=Token>> CompilationEngine<VMInstruction> for VMCompiler<T>
             VMInstruction::CArithmetic { cmd: "not".to_string() }
         );
         self.instruction_buffer.push(
-            VMInstruction::CIf{ label: format!("end_while_{}", self.while_counter) }
+            VMInstruction::CIf{ label: format!("end_while_{}", while_counter) }
         );
         self.consume_symbol(')');
         self.consume_symbol('{');
         self.compile_statements();
         self.instruction_buffer.push(
-            VMInstruction::CGoto{ label: format!("while_loop_{}", self.while_counter) }
+            VMInstruction::CGoto{ label: format!("while_loop_{}", while_counter) }
         );
         self.consume_symbol('}');
         self.instruction_buffer.push(
-            VMInstruction::CLabel{ label: format!("end_while_{}", self.while_counter) }
+            VMInstruction::CLabel{ label: format!("end_while_{}", while_counter) }
         );
+        
     }    
 
     fn compile_return(&mut self){
