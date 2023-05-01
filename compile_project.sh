@@ -13,7 +13,6 @@ fi
 # copy files from target into the build folder
 cp $1/* build
 target=`basename $1`
->>>>>>> main
 # compile jack files into vm files in the build directory
 cargo run --bin compiler $1 build
 # compile vm files in build file into ASM and HACK files
