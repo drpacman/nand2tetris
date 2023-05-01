@@ -627,10 +627,15 @@ impl Compiler {
     pub fn call(&mut self, symbol: &str, n_args : u32, output : &mut Vec<Instruction>) {
         // Use an helper function to reduce ASM footprint
         // R14 = n args
-        output.push(Instruction::AInstruction { symbol: None, value: Some(n_args) });
-        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None });   
-        output.push(Instruction::AInstruction { symbol: Some("R14".to_string()), value: None });
-        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });                
+        if n_args == 0 || n_args == 1 {
+            output.push(Instruction::AInstruction { symbol: Some("R14".to_string()), value: None });
+            output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp: n_args.to_string(), jump: None });                
+        } else {
+            output.push(Instruction::AInstruction { symbol: None, value: Some(n_args) });
+            output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None });   
+            output.push(Instruction::AInstruction { symbol: Some("R14".to_string()), value: None });
+            output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });                
+        }
         // R15 = function symbol
         output.push(Instruction::AInstruction { symbol: Some(symbol.to_string()), value: None });
         output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None });   
