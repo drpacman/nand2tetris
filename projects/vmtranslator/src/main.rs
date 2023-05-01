@@ -35,14 +35,13 @@ fn compile_dir(mut compiler: &mut Compiler, path : &Path) -> Vec<Instruction> {
     .collect()
 }
 
-fn compile(path : &Path) {
+fn compile(path : &Path, target : &str) {
     let mut compiler = Compiler::new();
     let mut instructions = compiler.generate_bootstrap();
-    let filestem = path.file_stem().unwrap().to_str().unwrap();
     let mut compiled_instructions = compile_dir(&mut compiler, &path);
     instructions.append(&mut compiled_instructions);
     let mut target_file_stem = path.to_path_buf();
-    target_file_stem.push(filestem);               
+    target_file_stem.push(target);               
     write_asm(target_file_stem.to_str().unwrap(), &instructions);
     write_hack(target_file_stem.to_str().unwrap(), &instructions);
 }
@@ -50,8 +49,9 @@ fn compile(path : &Path) {
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut path = Path::new(args[1].as_str());
+    let target = args[2].as_str();
     if path.is_file(){
         path = path.parent().unwrap();
     }
-    compile(path);
+    compile(path, target);
 }
