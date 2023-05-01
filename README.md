@@ -17,4 +17,6 @@ e.g.
 cargo run --bin assembler nand2tetris/projects/06/max/Max
 ```
 
+### Links
+* [Thread on optimisations to enable generated Hack programs to fit in 32K ROM](http://nand2tetris-questions-and-answers-forum.52.s1.nabble.com/Generated-code-size-tt1201814.html#a1263768)
 

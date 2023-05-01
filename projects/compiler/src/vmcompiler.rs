@@ -21,18 +21,31 @@ pub struct VMCompiler<T> where T:Iterator {
 }
 
 pub struct VMWriter {
-    filename : String
+    dir : String
 }
 
 impl VMWriter {
-    pub fn new(filestem : &str) -> VMWriter {
+    pub fn new(dir : &str) -> VMWriter {
         VMWriter { 
-            filename:  format!("{}.vm", filestem)
+            dir:  dir.to_string()
         }
     }
 
-    pub fn write(&self, ins : &Vec<VMInstruction>) {
-        let mut f = File::create(&self.filename).expect("unable to create file");
+    pub fn write_sys_vm(&self) {
+        let mut instructions = Vec::new();
+        instructions.push(VMInstruction::CFunction { symbol: "Sys.init".to_string(), n_vars: 0 });
+        instructions.push(VMInstruction::CCall { symbol: "Main.main".to_string(), n_args: 0 });
+        instructions.push(VMInstruction::CLabel { label: "INFINITE_LOOP".to_string() });        
+        instructions.push(VMInstruction::CGoto { label: "INFINITE_LOOP".to_string() });
+        self.write_file("sys.vm", &instructions);
+
+    }
+    pub fn write(&self, filestem:&str, ins : &Vec<VMInstruction>) {
+        self.write_file(format!("{}.vm", filestem).as_str(), ins);
+    }
+
+    fn write_file(&self, filename:&str, ins : &Vec<VMInstruction>) {
+        let mut f = File::create(format!("{}/{}", self.dir, filename).as_str()).expect("unable to create file");
         let asm : Vec<String> = ins.iter().map(|i| i.to_string()).collect();
         write!(f, "{}", asm.join("\r")).expect("Failed to write VM instructions to file")
     }

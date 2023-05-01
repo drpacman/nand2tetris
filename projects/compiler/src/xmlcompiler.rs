@@ -6,18 +6,18 @@ use std::fs::File;
 use std::io::prelude::*;
 
 pub struct XMLWriter {
-    filename : String
+    dir : String
 }
 
 impl XMLWriter {
-    pub fn new(filestem : &str) -> XMLWriter {
+    pub fn new(dir : &str) -> XMLWriter {
         XMLWriter { 
-            filename:  format!("{}.xml", filestem)
+            dir:  dir.to_string()
         }
     }
 
-    pub fn write(&self, ins : &Vec<String>) {
-        let mut f = File::create(&self.filename).expect("unable to create file");
+    pub fn write(&self, filestem: &str, ins : &Vec<String>) {
+        let mut f = File::create(format!("{}/{}.xml", self.dir, filestem).as_str()).expect("unable to create file");
         write!(f, "{}", ins.join("\r")).expect("Failed to write XML to file")
     }
 }
