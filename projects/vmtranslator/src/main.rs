@@ -23,6 +23,7 @@ fn generate_asm(compiler: &mut Compiler, filename : &str) -> Vec<Instruction> {
 
 fn compile_dir(mut compiler: &mut Compiler, path : &Path) -> Vec<Instruction> {
     // get all .vm files in that dir
+    println!("Processing directory {:?}", path);
     let dir_entries = std::fs::read_dir(path).expect(format!("File {:?} not found", path).as_str());    
     dir_entries.into_iter().filter(|f| {
         f.as_ref().unwrap().path().as_path().extension().unwrap() == "vm"
@@ -34,18 +35,13 @@ fn compile_dir(mut compiler: &mut Compiler, path : &Path) -> Vec<Instruction> {
     .collect()
 }
 
-fn compile(path : &Path, os_path : Option<&Path>) {
+fn compile(path : &Path, target : &str) {
     let mut compiler = Compiler::new();
     let mut instructions = compiler.generate_bootstrap();
-    if let Some(os_files_path) = os_path {
-        let mut compiled_os_instructions = compile_dir(&mut compiler, &os_files_path);
-        instructions.append(&mut compiled_os_instructions);
-    }        
-    let filestem = path.file_stem().unwrap().to_str().unwrap();
     let mut compiled_instructions = compile_dir(&mut compiler, &path);
     instructions.append(&mut compiled_instructions);
     let mut target_file_stem = path.to_path_buf();
-    target_file_stem.push(filestem);               
+    target_file_stem.push(target);               
     write_asm(target_file_stem.to_str().unwrap(), &instructions);
     write_hack(target_file_stem.to_str().unwrap(), &instructions);
 }
@@ -53,13 +49,9 @@ fn compile(path : &Path, os_path : Option<&Path>) {
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut path = Path::new(args[1].as_str());
+    let target = args[2].as_str();
     if path.is_file(){
         path = path.parent().unwrap();
     }
-    let os_path = if args.len() == 3 {
-        Some(Path::new(args[2].as_str()))
-    } else {
-        None
-    };
-    compile(path, os_path);
+    compile(path, target);
 }
