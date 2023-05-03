@@ -150,13 +150,28 @@ impl Compiler {
         init.push(Instruction::CInstruction { dest: Some("M".to_string()), comp: ("D".to_string()), jump: None });
         // call Sys.init
         self.call("Sys.init", 0, &mut init);
-        // add in global helper functions which reduce duplicated code
-        init.append(&mut self.generate_restore_stack_and_return_global_helper());
-        init.append(&mut self.generate_call_global_helper());
-        init.append(&mut self.generate_boolean_cmd_global_helper("JLT"));
-        init.append(&mut self.generate_boolean_cmd_global_helper("JGT"));
-        init.append(&mut self.generate_boolean_cmd_global_helper("JEQ"));
         init
+    }
+
+    pub fn generate_global_helper_functions(&mut self) -> Vec<assembler::Instruction> {
+        let mut global_fns = Vec::new();
+        // prefix helper functions with an infinite loop (so it doesn't break simpler examples)
+        global_fns.append(&mut self.generate_global_halt());
+        // add in global helper functions which reduce duplicated code
+        global_fns.append(&mut self.generate_restore_stack_and_return_global_helper());
+        global_fns.append(&mut self.generate_call_global_helper());
+        global_fns.append(&mut self.generate_boolean_cmd_global_helper("JLT"));
+        global_fns.append(&mut self.generate_boolean_cmd_global_helper("JGT"));
+        global_fns.append(&mut self.generate_boolean_cmd_global_helper("JEQ"));  
+        global_fns
+    }
+
+    fn generate_global_halt(&mut self) -> Vec<assembler::Instruction> {
+        let mut output = Vec::new();
+        output.push(Instruction::LInstruction { symbol: "HALT_LOOP".to_string() });
+        output.push(Instruction::AInstruction { symbol: Some("HALT_LOOP".to_string()), value: None });
+        output.push(Instruction::CInstruction { dest: None, comp: ("0".to_string()), jump: Some("JMP".to_string()) });        
+        output
     }
 
     fn generate_restore_stack_and_return_global_helper(&mut self) -> Vec<assembler::Instruction> {
@@ -315,6 +330,9 @@ impl Compiler {
                     pre_processed_instuctions.push(instructions.get(i).unwrap().clone());
                 }
             }
+        }
+        if !skip {
+            pre_processed_instuctions.push(instructions.get(instructions.len() - 1).unwrap().clone());
         }
         pre_processed_instuctions
     }
@@ -676,7 +694,7 @@ impl Compiler {
         
         output.push(Instruction::AInstruction { symbol: Some(format!("boolean_cmd_helper_{}", jmp_cmd)), value: None });
         output.push(Instruction::CInstruction { dest: None, comp:"0".to_string(), jump: Some("JMP".to_string()) });
-        output.push(Instruction::LInstruction { symbol: format!("END_BOOL_{}", self.bool_symbol_counter) });
+        output.push(Instruction::LInstruction { symbol: return_label });
     }
 }
 
