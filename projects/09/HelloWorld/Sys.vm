@@ -1,1 +1,0 @@
-function Sys.init 0call Main.main 0label INFINITE_LOOPgoto INFINITE_LOOP
