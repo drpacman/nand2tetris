@@ -9,7 +9,7 @@ else
 fi
 
 # copy OS files in build dir
-#cp nand2tetris/tools/OS/*.vm build
+cp tools/OS/*.vm build
 # copy files from target into the build folder
 cp $1/* build
 target=`basename $1`

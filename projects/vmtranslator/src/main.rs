@@ -21,25 +21,25 @@ fn generate_asm(compiler: &mut Compiler, filename : &str) -> Vec<Instruction> {
     compiler.compile(vm_instructions)    
 }
 
-fn compile_dir(mut compiler: &mut Compiler, path : &Path) -> Vec<Instruction> {
-    // get all .vm files in that dir
-    println!("Processing directory {:?}", path);
-    let dir_entries = std::fs::read_dir(path).expect(format!("File {:?} not found", path).as_str());    
-    dir_entries.into_iter().filter(|f| {
-        f.as_ref().unwrap().path().as_path().extension().unwrap() == "vm"
-    })
-    .map(|dir_entry| {
-        generate_asm(&mut compiler, dir_entry.unwrap().path().to_str().unwrap())
-    })
-    .flatten()
-    .collect()
-}
-
 fn compile(path : &Path, target : &str) {
     let mut compiler = Compiler::new();
-    let mut instructions = compiler.generate_bootstrap();
-    let mut compiled_instructions = compile_dir(&mut compiler, &path);
+
+    let dir_entries = std::fs::read_dir(path).expect(format!("File {:?} not found", path).as_str());    
+    let vm_files : Vec<Result<std::fs::DirEntry, std::io::Error>> = dir_entries.into_iter().filter(|f| {
+        f.as_ref().unwrap().path().as_path().extension().unwrap() == "vm"
+    }).collect();
+
+    let vm_file_count = vm_files.len();
+    let mut compiled_instructions = vm_files.into_iter().map(|vm_file| {
+        generate_asm(&mut compiler, vm_file.unwrap().path().to_str().unwrap())
+    }).flatten().collect();
+    // if more then one vm file exists, generate bootstrap code.
+    let mut instructions = Vec::new();
+    if vm_file_count > 1 {
+        instructions.append(&mut compiler.generate_bootstrap());
+    }
     instructions.append(&mut compiled_instructions);
+    instructions.append(&mut compiler.generate_global_helper_functions());
     let mut target_file_stem = path.to_path_buf();
     target_file_stem.push(target);               
     write_asm(target_file_stem.to_str().unwrap(), &instructions);

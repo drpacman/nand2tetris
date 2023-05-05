@@ -129,7 +129,8 @@ impl VMInstructionParser {
 pub struct Compiler {
     bool_symbol_counter : u32,
     ret_symbol_count : u32,
-    static_base : u32
+    static_base : u32,
+    scope_label_prefix : Option<String>
 }
 
 impl Compiler {
@@ -137,7 +138,8 @@ impl Compiler {
         Compiler{ 
             bool_symbol_counter: 0,
             ret_symbol_count: 0,
-            static_base: 16
+            static_base: 16,
+            scope_label_prefix: None
         }
     }
 
@@ -340,7 +342,7 @@ impl Compiler {
     pub fn compile(&mut self, vm_instructions: Vec<VMInstruction>) -> Vec<assembler::Instruction> {
         self.bool_symbol_counter = 0;
         // convert any push followed by a pop into a single push pop command (for more efficient asm generation)
-        let pre_processed_instuctions = Compiler::pre_process(vm_instructions);
+        let pre_processed_instuctions = vm_instructions;//Compiler::pre_process(vm_instructions);
         let instructions = pre_processed_instuctions.iter().map(|ins| self.compile_instruction(ins)).flatten().collect();
         // update static base
         let static_count = pre_processed_instuctions.iter().filter_map(|ins| {
@@ -364,6 +366,14 @@ impl Compiler {
             "static" => { self.static_base.to_string() },
             "pointer" => "3".to_string(),
             _ => panic!("Unsupported segment {}", segment)
+        }
+    }
+
+    fn scoped_label(&self, label: &String) -> String {
+        if let Some(scope_label_prefix) = self.scope_label_prefix.as_ref() {
+            format!("{}${}", scope_label_prefix, label).to_lowercase()
+        } else {
+            label.to_lowercase()
         }
     }
 
@@ -462,16 +472,15 @@ impl Compiler {
                     },
                     _ => {}
                 }
-                output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None });
                 match *dst_value {
                     0 => { 
-                        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None });                
+                        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });                
                     },
                     1 => {
-                        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A+1".to_string(), jump: None });
+                        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M+1".to_string(), jump: None });
                     },
                     _ => {
-                        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None });                
+                        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });                
                         output.push(Instruction::AInstruction { symbol: None, value: Some(*dst_value) });
                         output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"D+A".to_string(), jump: None });
                     }
@@ -501,15 +510,15 @@ impl Compiler {
                 }
             },
             VMInstruction::CLabel { label } => {
-                output.push(Instruction::LInstruction { symbol: label.to_string() });
+                output.push(Instruction::LInstruction { symbol: self.scoped_label(label) });
             },
             VMInstruction::CGoto { label } => {
-                output.push(Instruction::AInstruction { symbol: Some(label.to_string()), value: None });
+                output.push(Instruction::AInstruction { symbol: Some(self.scoped_label(label)), value: None });
                 output.push(Instruction::CInstruction { dest: None, comp: "0".to_string(), jump: Some("JMP".to_string()) })                            
             },
             VMInstruction::CIf { label } => {
                 Compiler::pop_d(&mut output);
-                output.push(Instruction::AInstruction { symbol: Some(label.to_string()), value: None });
+                output.push(Instruction::AInstruction { symbol: Some(self.scoped_label(label)), value: None });
                 output.push(Instruction::CInstruction { dest: None, comp:"D".to_string(), jump: Some("JNE".to_string()) });
             },
             VMInstruction::CCall { symbol, n_args } => {
@@ -517,6 +526,7 @@ impl Compiler {
             },
             VMInstruction::CFunction { symbol, n_vars } => {
                 output.push(Instruction::LInstruction { symbol: symbol.to_string() });
+                self.scope_label_prefix = Some(symbol.clone());
                 for _ in 0..*n_vars {
                     Compiler::push_value(0, &mut output);
                 }
@@ -539,20 +549,19 @@ impl Compiler {
         match value {
             0 | 1 => {
                 output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
+                output.push(Instruction::CInstruction { dest: Some("AM".to_string()), comp:"M+1".to_string(), jump: None });
+                output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
                 output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:value.to_string(), jump: None });
             },
             _ => {
                 output.push(Instruction::AInstruction { symbol: None, value: Some(value) });
                 output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None }); 
                 output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
-                output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
+                output.push(Instruction::CInstruction { dest: Some("AM".to_string()), comp:"M+1".to_string(), jump: None });
+                output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
                 output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });
             }
         };
-        //Increment the stack pointer
-        output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
-        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M+1".to_string(), jump: None }); 
     }
 
     fn push_d(output : &mut Vec<Instruction>) {
@@ -583,8 +592,7 @@ impl Compiler {
     
     fn arithmetic_cmd(cmd : &str, output : &mut Vec<Instruction>){
         output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
-        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
-        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M-1".to_string(), jump: None });
         output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });
         output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
         output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:cmd.to_string(), jump: None });
@@ -603,8 +611,7 @@ impl Compiler {
     fn unary_cmd(cmd: &str, output : &mut Vec<Instruction>){
         // grab top value off the stack
         output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
-        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
-        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M-1".to_string(), jump: None });
         output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:cmd.to_string(), jump: None });                            
     }
 
@@ -617,8 +624,7 @@ impl Compiler {
     fn pop_d(output : &mut Vec<Instruction>) {
         output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
         // dec stack pointer
-        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M-1".to_string(), jump: None });            
-        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("AM".to_string()), comp:"M-1".to_string(), jump: None });            
         output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });
     }
 
