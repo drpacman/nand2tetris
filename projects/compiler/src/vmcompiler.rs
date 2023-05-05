@@ -31,15 +31,6 @@ impl VMWriter {
         }
     }
 
-    pub fn write_sys_vm(&self) {
-        let mut instructions = Vec::new();
-        instructions.push(VMInstruction::CFunction { symbol: "Sys.init".to_string(), n_vars: 0 });
-        instructions.push(VMInstruction::CCall { symbol: "Main.main".to_string(), n_args: 0 });
-        instructions.push(VMInstruction::CLabel { label: "INFINITE_LOOP".to_string() });        
-        instructions.push(VMInstruction::CGoto { label: "INFINITE_LOOP".to_string() });
-        self.write_file("sys.vm", &instructions);
-
-    }
     pub fn write(&self, filestem:&str, ins : &Vec<VMInstruction>) {
         self.write_file(format!("{}.vm", filestem).as_str(), ins);
     }
