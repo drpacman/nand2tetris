@@ -311,37 +311,37 @@ impl Compiler {
         output
     }
 
-    // fn pre_process(instructions : Vec<VMInstruction>) -> Vec<VMInstruction>{
-    //     let mut pre_processed_instuctions = Vec::new();
-    //     let mut skip = false;
-    //     for i in 0..(instructions.len() - 1){
-    //         if skip { 
-    //             skip = false;
-    //             continue; 
-    //         }
-    //         match (instructions.get(i).unwrap(), instructions.get(i+1).unwrap()) {
-    //             ( VMInstruction::CPush{ segment: src_seg, value: src_value }, VMInstruction::CPop{ segment: dst_seg, value: dst_value }) => {
-    //                 pre_processed_instuctions.push(VMInstruction::CPushPop { 
-    //                     src_segment: src_seg.clone(), 
-    //                     src_value: *src_value, 
-    //                     dst_segment: dst_seg.clone(), 
-    //                     dst_value: *dst_value });
-    //                 skip = true;
-    //             }, 
-    //             _ => {
-    //                 pre_processed_instuctions.push(instructions.get(i).unwrap().clone());
-    //             }
-    //         }
-    //     }
-    //     if !skip {
-    //         pre_processed_instuctions.push(instructions.get(instructions.len() - 1).unwrap().clone());
-    //     }
-    //     pre_processed_instuctions
-    // }
+    fn pre_process(instructions : Vec<VMInstruction>) -> Vec<VMInstruction>{
+        let mut pre_processed_instuctions = Vec::new();
+        let mut skip = false;
+        for i in 0..(instructions.len() - 1){
+            if skip { 
+                skip = false;
+                continue; 
+            }
+            match (instructions.get(i).unwrap(), instructions.get(i+1).unwrap()) {
+                ( VMInstruction::CPush{ segment: src_seg, value: src_value }, VMInstruction::CPop{ segment: dst_seg, value: dst_value }) => {
+                    pre_processed_instuctions.push(VMInstruction::CPushPop { 
+                        src_segment: src_seg.clone(), 
+                        src_value: *src_value, 
+                        dst_segment: dst_seg.clone(), 
+                        dst_value: *dst_value });
+                    skip = true;
+                }, 
+                _ => {
+                    pre_processed_instuctions.push(instructions.get(i).unwrap().clone());
+                }
+            }
+        }
+        if !skip {
+            pre_processed_instuctions.push(instructions.get(instructions.len() - 1).unwrap().clone());
+        }
+        pre_processed_instuctions
+    }
 
     pub fn compile(&mut self, vm_instructions: Vec<VMInstruction>) -> Vec<assembler::Instruction> {
         // convert any push followed by a pop into a single push pop command (for more efficient asm generation)
-        let pre_processed_instuctions = vm_instructions;//Compiler::pre_process(vm_instructions);
+        let pre_processed_instuctions = Compiler::pre_process(vm_instructions);
         let instructions = pre_processed_instuctions.iter().map(|ins| self.compile_instruction(ins)).flatten().collect();
         // update static base
         let static_count = pre_processed_instuctions.iter().filter_map(|ins| {
@@ -447,7 +447,7 @@ impl Compiler {
                             },
                             _ => {}
                         }
-                        // adjust A if not first item in segment
+                        // adjust Address A if not first item in segment
                         if *src_value == 1 {
                             output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A+1".to_string(), jump: None });
                         } else if *src_value > 1 {
@@ -473,13 +473,13 @@ impl Compiler {
                 }
                 match *dst_value {
                     0 => { 
-                        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });                
+                        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None });                
                     },
                     1 => {
-                        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M+1".to_string(), jump: None });
+                        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A+1".to_string(), jump: None });
                     },
                     _ => {
-                        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });                
+                        output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"A".to_string(), jump: None });                
                         output.push(Instruction::AInstruction { symbol: None, value: Some(*dst_value) });
                         output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"D+A".to_string(), jump: None });
                     }
@@ -487,7 +487,7 @@ impl Compiler {
                 output.push(Instruction::AInstruction { symbol: Some("R14".to_string()), value: None });
                 output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });            
                 
-                // Put the target value held in R13 into the destination held address held in R14
+                // Put the target value held in R13 into the destination address held in R14
                 output.push(Instruction::AInstruction { symbol: Some("R13".to_string()), value: None });
                 output.push(Instruction::CInstruction { dest: Some("D".to_string()), comp:"M".to_string(), jump: None });            
                 output.push(Instruction::AInstruction { symbol: Some("R14".to_string()), value: None });
