@@ -311,36 +311,35 @@ impl Compiler {
         output
     }
 
-    fn pre_process(instructions : Vec<VMInstruction>) -> Vec<VMInstruction>{
-        let mut pre_processed_instuctions = Vec::new();
-        let mut skip = false;
-        for i in 0..(instructions.len() - 1){
-            if skip { 
-                skip = false;
-                continue; 
-            }
-            match (instructions.get(i).unwrap(), instructions.get(i+1).unwrap()) {
-                ( VMInstruction::CPush{ segment: src_seg, value: src_value }, VMInstruction::CPop{ segment: dst_seg, value: dst_value }) => {
-                    pre_processed_instuctions.push(VMInstruction::CPushPop { 
-                        src_segment: src_seg.clone(), 
-                        src_value: *src_value, 
-                        dst_segment: dst_seg.clone(), 
-                        dst_value: *dst_value });
-                    skip = true;
-                }, 
-                _ => {
-                    pre_processed_instuctions.push(instructions.get(i).unwrap().clone());
-                }
-            }
-        }
-        if !skip {
-            pre_processed_instuctions.push(instructions.get(instructions.len() - 1).unwrap().clone());
-        }
-        pre_processed_instuctions
-    }
+    // fn pre_process(instructions : Vec<VMInstruction>) -> Vec<VMInstruction>{
+    //     let mut pre_processed_instuctions = Vec::new();
+    //     let mut skip = false;
+    //     for i in 0..(instructions.len() - 1){
+    //         if skip { 
+    //             skip = false;
+    //             continue; 
+    //         }
+    //         match (instructions.get(i).unwrap(), instructions.get(i+1).unwrap()) {
+    //             ( VMInstruction::CPush{ segment: src_seg, value: src_value }, VMInstruction::CPop{ segment: dst_seg, value: dst_value }) => {
+    //                 pre_processed_instuctions.push(VMInstruction::CPushPop { 
+    //                     src_segment: src_seg.clone(), 
+    //                     src_value: *src_value, 
+    //                     dst_segment: dst_seg.clone(), 
+    //                     dst_value: *dst_value });
+    //                 skip = true;
+    //             }, 
+    //             _ => {
+    //                 pre_processed_instuctions.push(instructions.get(i).unwrap().clone());
+    //             }
+    //         }
+    //     }
+    //     if !skip {
+    //         pre_processed_instuctions.push(instructions.get(instructions.len() - 1).unwrap().clone());
+    //     }
+    //     pre_processed_instuctions
+    // }
 
     pub fn compile(&mut self, vm_instructions: Vec<VMInstruction>) -> Vec<assembler::Instruction> {
-        self.bool_symbol_counter = 0;
         // convert any push followed by a pop into a single push pop command (for more efficient asm generation)
         let pre_processed_instuctions = vm_instructions;//Compiler::pre_process(vm_instructions);
         let instructions = pre_processed_instuctions.iter().map(|ins| self.compile_instruction(ins)).flatten().collect();
