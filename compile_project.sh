@@ -16,4 +16,4 @@ target=`basename $1`
 # compile jack files into vm files in the build directory
 cargo run --bin compiler $1 build
 # compile vm files in build file into ASM and HACK files
-cargo run --bin vmtranslator build $target
+cargo run --bin vmtranslator build $target | egrep -e "^[0-9]" > line_numbers.txt
