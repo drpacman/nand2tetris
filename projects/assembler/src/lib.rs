@@ -157,7 +157,7 @@ impl Assembler {
             match instruction {
                 Instruction::LInstruction{ symbol } => {
                     self.symbol_table.insert(symbol.clone(), line_num);
-                    println!("{} - {}", symbol, line_num);
+                    println!("{} - {}", line_num, symbol);
                 },
                 Instruction::Comment { contents: _ } => {},
                 _ => {
