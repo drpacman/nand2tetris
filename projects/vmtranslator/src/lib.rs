@@ -404,9 +404,18 @@ impl Compiler {
                     }
                 }
             }, 
+            // VMInstruction::CPop{ segment, value } if segment == "pointer" => {
+            //     Compiler::pop_d(&mut output);
+            //     if *value == 0 {
+            //         output.push(Instruction::AInstruction { symbol: Some("THIS".to_string()), value: None });                                        
+            //     } else {
+            //         output.push(Instruction::AInstruction { symbol: Some("THAT".to_string()), value: None });                                        
+            //     } 
+            //     output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
+            //     output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });
+            // }, 
             VMInstruction::CPop{ segment, value } => {
-                let target = self.lookup_segment_target(segment);
-                        
+                let target = self.lookup_segment_target(segment);                     
                 output.push(Instruction::AInstruction { symbol: Some(target.to_string()), value: None });                    
                 match target.as_str() {
                     "LCL" | "ARG" | "THIS" | "THAT" => {
@@ -564,13 +573,11 @@ impl Compiler {
     }
 
     fn push_d(output : &mut Vec<Instruction>) {
-        //Push the value in D
+        //Push the value in D, incrementing the stack
         output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
-        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"M".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("AM".to_string()), comp:"M+1".to_string(), jump: None });
+        output.push(Instruction::CInstruction { dest: Some("A".to_string()), comp:"A-1".to_string(), jump: None });
         output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"D".to_string(), jump: None });
-        //Increment the stack pointer
-        output.push(Instruction::AInstruction { symbol: Some("SP".to_string()), value: None });
-        output.push(Instruction::CInstruction { dest: Some("M".to_string()), comp:"M+1".to_string(), jump: None }); 
     }
 
     fn sub(output : &mut Vec<Instruction>) {
